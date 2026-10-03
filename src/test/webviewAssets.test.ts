@@ -15,6 +15,8 @@ const PERIODS = (['today', 'last30Days', 'previousMonth', 'projectedYear'] as co
 	totals: { ...TOTALS, carbonGrams: TOTALS.carbonGrams * 10 ** i, waterLiters: TOTALS.waterLiters * 10 ** i },
 	from: Date.parse('2026-09-01T12:00:00.000Z'),
 	basisDays: id === 'projectedYear' ? 12 : null,
+	coverage: 'full',
+	dataFrom: null,
 }));
 const VIEW = {
 	type: 'view',
@@ -146,6 +148,20 @@ suite('Webview assets', () => {
 		const invalid = loadSidebarScript(undefined, { state: { period: 'forever' } });
 		invalid.send({ ...VIEW });
 		assert.strictEqual(invalid.text('metric-carbon'), PERIODS[0].totals.text.carbon);
+	});
+
+	test('a period without recorded history says so instead of showing zeros', () => {
+		const sidebar = loadSidebarScript();
+		const none = { ...PERIODS[2], coverage: 'none', note: 'September 2026, no data' };
+		sidebar.send({ ...VIEW, periods: [PERIODS[0], PERIODS[1], none, PERIODS[3]] });
+		assert.strictEqual(sidebar.el('period-empty').hidden, true);
+		assert.strictEqual(sidebar.el('period-figures').hidden, false);
+		sidebar.el('period-previousMonth').click();
+		assert.strictEqual(sidebar.el('period-empty').hidden, false);
+		assert.strictEqual(sidebar.el('period-figures').hidden, true);
+		assert.strictEqual(sidebar.text('period-note'), 'September 2026, no data');
+		sidebar.el('period-today').click();
+		assert.strictEqual(sidebar.el('period-empty').hidden, true);
 	});
 
 	test('sidebar.js shows the latest request with tokens, a +N active indicator and how long ago when idle', () => {

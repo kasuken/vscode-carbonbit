@@ -135,6 +135,10 @@ a:active {
 	letter-spacing: -0.01em;
 }
 
+.period-value-empty {
+	color: var(--vscode-descriptionForeground);
+}
+
 .equivalents {
 	display: grid;
 	grid-template-columns: 18px max-content minmax(0, 1fr);

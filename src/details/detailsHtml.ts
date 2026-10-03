@@ -42,7 +42,7 @@ export function getDetailsHtml(options: DetailsHtmlOptions): string {
 		<section id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
 			<section class="footprint" aria-labelledby="footprint-heading">
 				<h2 id="footprint-heading">Footprint over time</h2>
-				<p class="note">Each figure comes with everyday comparisons of about the same size. The projected year extends your last 30 days of usage.</p>
+				<p class="note">Each figure comes with everyday comparisons of about the same size. The projected year extends your last 30 days of usage. Periods before your tools&rsquo; local logs begin show no data rather than zero.</p>
 				<p id="footprint-unavailable" class="note" hidden>Usage history is unavailable.</p>
 				<section class="impact impact-carbon" aria-labelledby="footprint-carbon-heading">
 					<h3 id="footprint-carbon-heading">Estimated CO&#8322;e</h3>

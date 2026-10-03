@@ -57,6 +57,8 @@ The footprint is shown for four periods:
 
 The projection divides by the days CarbonBit actually has data for: from the first request in the window until now, at least 1 and at most 30. This keeps a fresh install from looking smaller than it is. It is an extrapolation of recent usage, not a forecast, and the UI says how many days it is based on.
 
+CarbonBit only knows what the tools' local logs still contain (on first run it imports them as far back as the retention window allows; some tools delete old logs). A period that starts before the earliest recorded request is marked **partial** ("data from 12 Sep"), and one that ends before it is marked **no data** rather than shown as zero usage.
+
 ## Everyday comparisons (v1.1.0)
 
 Each CO₂e and water figure comes with comparisons of about the same size. They put the number in context and carry the same uncertainty as the estimate itself. Transport comparisons use CO₂e directly. Household devices are compared by **energy**, so the comparison holds under the same grid intensity CarbonBit applies to AI energy. Water comparisons use litres.

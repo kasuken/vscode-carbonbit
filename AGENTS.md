@@ -154,7 +154,8 @@ Text pre-formatting (units) is done on the host (`core/impact/units.ts`), not in
 - Copilot Chat sessions of **all** workspaces are found under the VS Code user folder (derived from
   `context.globalStorageUri`); remote windows read logs on the extension host side.
 - On start, adapters import logs modified since the `carbonbit.lastTrackedAt` checkpoint (globalState, saved with a
-  margin after the import finishes). Imported events carry origin `import`: stored, but never fed to the world or
+  margin after the import finishes). Until `carbonbit.historyBackfill` reaches `BACKFILL_VERSION` the import instead
+  reaches back to the retention window (max `BACKFILL_DAYS`); bump the version to backfill existing installs again. Imported events carry origin `import`: stored, but never fed to the world or
   live activity. Keep parsing chunked/yielding — real logs reach hundreds of MB.
 - The database may be shared by several VS Code windows; keep writes idempotent (upsert by event id) and
   migrations safe under concurrency (`BEGIN IMMEDIATE`).

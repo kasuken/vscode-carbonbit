@@ -111,6 +111,8 @@ export function getSidebarHtml(options: SidebarHtmlOptions): string {
 			${periodTabs}
 		</div>
 		<div id="footprint-panel" role="tabpanel" aria-labelledby="period-today">
+			<p id="period-empty" class="period-empty" hidden>No usage recorded for this period. CarbonBit can only count what your AI tools&rsquo; local logs still contain.</p>
+			<div id="period-figures">
 			<div class="impact impact-carbon">
 				<p class="figure"><span class="figure-label">Emissions</span> <span id="metric-carbon" class="figure-value">&mdash;</span></p>
 				<p class="same-as">About the same as</p>
@@ -126,6 +128,7 @@ export function getSidebarHtml(options: SidebarHtmlOptions): string {
 				<div><dt>Tokens</dt><dd id="metric-tokens">&mdash;</dd></div>
 				<div><dt>Requests</dt><dd id="metric-requests">&mdash;</dd></div>
 			</dl>
+			</div>
 			<p id="estimate-note" class="note">Energy, CO&#8322;e and water are estimates, not measurements.</p>
 		</div>
 	</section>

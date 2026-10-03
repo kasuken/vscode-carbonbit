@@ -18,7 +18,9 @@ First MVP (PRD v0.1).
 - Activity Bar sidebar with a reactive 16-bit pixel world (idle, request starting, light/medium/heavy processing, response, failure); FPS cap, reduced motion, hidden-view pause; `environmental`, `neutral` and `minimal` visual modes.
 - Local usage tracking for GitHub Copilot Chat, Claude Code, GitHub Copilot CLI and Codex CLI from their session logs; providers fail independently.
 - Copilot Chat usage is tracked across all workspaces of the running VS Code, not only the current window.
-- On start, usage logged since the previous run (first run: since midnight) is imported in the background into history, without animating the world. Large logs are read in slices to keep the editor responsive.
+- On start, usage logged since the previous run is imported in the background into history, without animating the world. The first time (and once on existing installs), the import reaches back as far as the tools' logs go, within `carbonbit.dataRetentionDays` and at most a year. Large logs are read in slices to keep the editor responsive.
+- Periods with no recorded history (for example the month before your tools' logs begin) say "no data" instead of showing zeros; partly covered periods say from which day data starts.
+- Storing requests is about 18 times faster (SQLite `synchronous = NORMAL` with WAL), so large imports no longer hold up the extension host.
 - Energy, CO₂e and water estimates with High/Medium/Low confidence and reasons; versioned methodology (`carbonbit-impact` 1.1.0, see `docs/METHODOLOGY.md`).
 - Live status, today's totals and provider shares; Details and Methodology panel.
 - Local SQLite history (`node:sqlite`) with `carbonbit.dataRetentionDays`, corruption recovery and **Clear Local Data**.

@@ -18,7 +18,7 @@ import { normalizeRetentionDays } from './core/settings/retentionSettings';
 import { normalizeVisualMode } from './core/settings/visualModeSettings';
 import { DATABASE_FILE_NAME, openUsageStore } from './core/storage/openUsageStore';
 import { localStartOfDay, UsageHistory } from './core/storage/usageHistory';
-import { checkpointAt, importSince } from './core/usage/importCheckpoint';
+import { BACKFILL_VERSION, checkpointAt, importSince, needsBackfill } from './core/usage/importCheckpoint';
 import { UsageService } from './core/usage/usageService';
 import { methodologyView, toDetailsView } from './core/view/detailsView';
 import { LiveActivity } from './core/view/liveActivity';
@@ -37,6 +37,7 @@ const VIEW_REFRESH_MS = 60_000;
 const PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const ONBOARDING_DISMISSED_KEY = 'carbonbit.onboardingDismissed';
 const LAST_TRACKED_KEY = 'carbonbit.lastTrackedAt';
+const BACKFILL_KEY = 'carbonbit.historyBackfill';
 
 // globalStorageUri is `<User>/globalStorage/<extension id>`; chat sessions live under `<User>`.
 function vscodeUserDir(context: vscode.ExtensionContext): string {
@@ -120,8 +121,15 @@ export function activate(context: vscode.ExtensionContext) {
 	const live = new LiveActivity();
 	const log = (message: string) => output.info(message);
 	const usage = new UsageService(log);
-	// Logs written while CarbonBit was not running are imported in the background on start.
-	const since = importSince(context.globalState.get(LAST_TRACKED_KEY), Date.now(), localStartOfDay, readRetentionDays());
+	// Logs written while CarbonBit was not running are imported in the background on start; the first
+	// time, that includes whatever history the tools' logs still hold, so past periods aren't empty.
+	// The extension's own test host never imports the developer's whole history.
+	const backfilled = context.extensionMode === vscode.ExtensionMode.Test ? BACKFILL_VERSION : context.globalState.get(BACKFILL_KEY);
+	const backfill = needsBackfill(backfilled);
+	const since = importSince(context.globalState.get(LAST_TRACKED_KEY), Date.now(), localStartOfDay, readRetentionDays(), backfilled);
+	if (backfill) {
+		log(`importing usage history since ${new Date(since).toISOString().slice(0, 10)} from local logs`);
+	}
 	usage.register(new CopilotChatAdapter({
 		...copilotChatSessionRoots(vscodeUserDir(context)),
 		isCopilotChatInstalled: () => vscode.extensions.getExtension('GitHub.copilot-chat') !== undefined,
@@ -234,6 +242,9 @@ export function activate(context: vscode.ExtensionContext) {
 		// Advance the checkpoint only after the import finished, so an interrupted import is retried.
 		importDone = true;
 		saveCheckpoint();
+		if (backfill) {
+			void context.globalState.update(BACKFILL_KEY, BACKFILL_VERSION);
+		}
 		publishView();
 	});
 }

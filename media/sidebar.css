@@ -334,6 +334,13 @@ canvas {
 	background-color: var(--cb-raised);
 }
 
+.period-empty {
+	padding: 10px 12px;
+	font-size: 12px;
+	color: var(--cb-muted);
+	border: 1px dashed var(--cb-line);
+}
+
 .impact {
 	padding-left: 10px;
 	border-left: calc(var(--cb-pixel) * 2) solid var(--cb-ember);

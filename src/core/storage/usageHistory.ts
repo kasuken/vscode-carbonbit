@@ -1,5 +1,5 @@
 import { ImpactEngine } from '../impact/impactEngine';
-import type { PeriodId, TodayMetrics } from '../messages/protocol';
+import type { PeriodCoverage, PeriodId, TodayMetrics } from '../messages/protocol';
 import type { Disposable } from '../providers/provider';
 import { retentionCutoff } from '../settings/retentionSettings';
 import type { AiUsageEvent } from '../usage/usageEvent';
@@ -19,6 +19,21 @@ export interface PeriodSummary {
 	from: number;
 	/** `projectedYear` only: days of recorded usage (1-30) the projection is based on; 0 without usage. */
 	basisDays: number | null;
+	/**
+	 * How much of the period the recorded history covers, judged by the earliest stored request:
+	 * a zero total only means "no usage" when the whole period is covered.
+	 */
+	coverage: PeriodCoverage;
+	/** Earliest stored request (epoch ms), when it falls inside the period; otherwise `null`. */
+	dataFrom: number | null;
+}
+
+// Today is always covered: tracking is live. Other periods depend on how far back history goes.
+function coverageOf(firstEver: number | null, from: number, to: number): { coverage: PeriodCoverage; dataFrom: number | null } {
+	if (firstEver === null || firstEver >= to) {
+		return { coverage: 'none', dataFrom: null };
+	}
+	return firstEver > from ? { coverage: 'partial', dataFrom: firstEver } : { coverage: 'full', dataFrom: null };
 }
 
 export interface UsageHistoryOptions {
@@ -191,20 +206,26 @@ export class UsageHistory implements Disposable {
 		const first = this.run('first', null, store => store.firstStartedAt(rollingFrom, end));
 		const spanDays = first === null ? 0 : Math.min(ROLLING_DAYS, Math.max(1, (now - first) / DAY_MS));
 		const previousFrom = this.startOfMonth(now, -1);
+		const previousTo = this.startOfMonth(now, 0);
+		const firstEver = this.run('first', null, store => store.firstStartedAt(0, end));
 		return [
-			{ id: 'today', totals: this.totals('today'), from: this.startOfDay(now), basisDays: null },
-			{ id: 'last30Days', totals: rolling, from: rollingFrom, basisDays: null },
+			{ id: 'today', totals: this.totals('today'), from: this.startOfDay(now), basisDays: null, coverage: 'full', dataFrom: null },
+			{ id: 'last30Days', totals: rolling, from: rollingFrom, basisDays: null, ...coverageOf(firstEver, rollingFrom, end) },
 			{
 				id: 'previousMonth',
-				totals: this.run('totals', { ...EMPTY_TOTALS }, store => store.totals(previousFrom, this.startOfMonth(now, 0))),
+				totals: this.run('totals', { ...EMPTY_TOTALS }, store => store.totals(previousFrom, previousTo)),
 				from: previousFrom,
 				basisDays: null,
+				...coverageOf(firstEver, previousFrom, previousTo),
 			},
 			{
 				id: 'projectedYear',
 				totals: spanDays > 0 ? scaleTotals(rolling, 365 / spanDays) : { ...EMPTY_TOTALS },
 				from: first ?? now,
 				basisDays: Math.ceil(spanDays),
+				// The note already says how many days the projection rests on.
+				coverage: spanDays > 0 ? 'full' : 'none',
+				dataFrom: null,
 			},
 		];
 	}
