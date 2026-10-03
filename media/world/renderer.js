@@ -1,7 +1,8 @@
-// Pixel-world renderer. The static background is cached once per time-of-day phase at logical
-// resolution; each frame blits it with nearest-neighbour integer scaling and draws the dynamic
-// layer on top. Frames come from requestAnimationFrame, capped at maxFps and stopped while hidden,
-// still or idle (idle only wakes about once a second for drifting clouds and the odd keystroke).
+// Pixel-world renderer for "Pale Blue Pixel". Two layers are cached at logical resolution: space
+// (drawn once) and the globe (redrawn only when the sun or the clouds have moved, every few seconds).
+// Each frame blits them with nearest-neighbour integer scaling and draws the moving layer on top.
+// Frames come from requestAnimationFrame, capped at maxFps and stopped while hidden, still or
+// idle (idle only wakes about once a second for twinkling stars, clouds and the odd satellite).
 (function () {
 	'use strict';
 
@@ -17,18 +18,19 @@
 	// Longer waits sleep on a timer so no animation frame wakes up only to be skipped.
 	const TIMER_THRESHOLD_MS = 20;
 	const TIMER_LEAD_MS = 10;
-	// The sky follows local time; the clock is read at most once a minute while animating.
+	// Day and night follow the wall clock, read at most once a minute and extrapolated in between.
 	const CLOCK_MS = 60_000;
-	const DEFAULT_HOUR = 12;
+	// Southern-hemisphere timezones, so the marker sits on the right half of the planet.
+	const SOUTHERN_ZONES = /^(Australia|Antarctica)\/|^Pacific\/(Auckland|Chatham|Fiji|Tongatapu)|^America\/(Sao_Paulo|Argentina|Buenos_Aires|Santiago|Montevideo|Asuncion|Lima|La_Paz)|^Africa\/(Johannesburg|Maputo|Harare|Windhoek|Lusaka|Gaborone)|^Indian\/(Mauritius|Reunion|Antananarivo)/;
 
 	const DESCRIPTIONS = Object.freeze({
-		Idle: 'Pixel world, idle: a developer works at a desk; across the meadow the data center is quiet.',
-		RequestStarting: 'Pixel world: a request leaves the desk and travels along the wire to the data center.',
-		ProcessingLight: 'Pixel world: the data center is working on a light request; a few servers are lit.',
-		ProcessingMedium: 'Pixel world: the data center is working on a medium request; more servers, cooling and power are active.',
-		ProcessingHeavy: 'Pixel world: the data center is working on a heavy request; all servers, the cooling and the power line are busy.',
-		ResponseArriving: 'Pixel world: the response travels back to the desk.',
-		Failed: 'Pixel world: the request did not complete; the data center shows an amber status light.',
+		Idle: 'Pixel planet, idle: the Earth from space with drifting clouds; your place is marked and the data center is quiet.',
+		RequestStarting: 'Pixel planet: a request leaves your place and arcs over the Earth toward a data center.',
+		ProcessingLight: 'Pixel planet: the data center works on a light request; a small glow and a little cooling vapour.',
+		ProcessingMedium: 'Pixel planet: the data center works on a medium request; a steady glow and more cooling vapour.',
+		ProcessingHeavy: 'Pixel planet: the data center works on a heavy request; its power glow and cooling vapour are at their busiest.',
+		ResponseArriving: 'Pixel planet: the reply arcs back over the Earth to your place.',
+		Failed: 'Pixel planet: the request did not complete; the data center shows an amber light.',
 	});
 
 	// Short, calm text alternative for the canvas (role=img).
@@ -44,16 +46,22 @@
 			: DEFAULT_CONFIG.maxFps;
 	}
 
-	function drawScene(ctx, frame, background) {
-		if (background) {
-			ctx.drawImage(background, 0, 0);
+	// Without cached layers (tests, first paint) everything is drawn directly.
+	function drawScene(ctx, frame, layers) {
+		if (layers && layers.background) {
+			ctx.drawImage(layers.background, 0, 0);
 		} else {
-			Scene.drawBackground(ctx, Scene.phaseOf(frame.hour));
+			Scene.drawBackground(ctx);
+		}
+		if (layers && layers.globe) {
+			ctx.drawImage(layers.globe, 0, 0);
+		} else {
+			Scene.drawGlobe(ctx, frame.epoch, frame.place);
 		}
 		Effects.drawDynamic(ctx, frame);
 	}
 
-	function stillFrame(state, mode, hour) {
+	function stillFrame(state, mode, epoch, place) {
 		return {
 			state,
 			prevState: state,
@@ -63,12 +71,13 @@
 			activeCount: 0,
 			still: true,
 			mode: mode || DEFAULT_CONFIG.visualMode,
-			hour: typeof hour === 'number' ? hour : DEFAULT_HOUR,
+			epoch: typeof epoch === 'number' ? epoch : 0,
+			place: place || Scene.DEFAULT_PLACE,
 		};
 	}
 
-	function drawIdleScene(ctx, hour) {
-		drawScene(ctx, stillFrame('Idle', DEFAULT_CONFIG.visualMode, hour));
+	function drawIdleScene(ctx, epoch, place) {
+		drawScene(ctx, stillFrame('Idle', DEFAULT_CONFIG.visualMode, epoch, place));
 	}
 
 	// onFrame(now) draws and returns the minimum gap in ms before the next frame, or null to stop.
@@ -143,7 +152,7 @@
 		});
 	}
 
-	function createBackgroundLayer(phase) {
+	function createLayer(draw) {
 		const layer = document.createElement('canvas');
 		layer.width = WIDTH;
 		layer.height = HEIGHT;
@@ -151,13 +160,21 @@
 		if (!layerCtx) {
 			return null;
 		}
-		Scene.drawBackground(layerCtx, phase);
-		return layer;
+		draw(layerCtx);
+		return { canvas: layer, ctx: layerCtx };
 	}
 
-	function localHour() {
+	// The viewer's approximate place: longitude from the UTC offset, hemisphere from the zone name.
+	// Used only to draw the marker; it never leaves the webview.
+	function localPlace() {
 		const date = new Date();
-		return date.getHours() + date.getMinutes() / 60;
+		let zone = '';
+		try {
+			zone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+		} catch {
+			// The marker falls back to the northern hemisphere.
+		}
+		return { lon: -date.getTimezoneOffset() / 4, south: SOUTHERN_ZONES.test(zone) };
 	}
 
 	// Mounts the world on a canvas and returns a controller fed by sidebar.js.
@@ -177,10 +194,12 @@
 		let level = 1;
 		let activeCount = 0;
 		let sized = false;
-		// One cached layer per time-of-day phase, built the first time that phase is shown.
-		const backgrounds = new Map();
-		let hour = localHour();
+		const place = localPlace();
+		let clockEpoch = new Date().getTime();
 		let clockReadAt = now();
+		let background = null;
+		let globe = null;
+		let globeKey = null;
 
 		const scheduler = createFrameScheduler(window, renderFrame);
 
@@ -195,28 +214,42 @@
 		function readClock(time, force) {
 			if (force || time - clockReadAt >= CLOCK_MS) {
 				clockReadAt = time;
-				hour = localHour();
+				clockEpoch = new Date().getTime();
 			}
 		}
 
-		function backgroundFor(phase) {
-			if (!backgrounds.has(phase)) {
-				backgrounds.set(phase, createBackgroundLayer(phase));
+		function epochAt(time) {
+			return clockEpoch + Math.max(0, time - clockReadAt);
+		}
+
+		function layersFor(epoch) {
+			background = background || createLayer(layerCtx => Scene.drawBackground(layerCtx));
+			const key = Scene.globeKey(epoch);
+			if (key !== globeKey) {
+				globeKey = key;
+				if (globe) {
+					globe.ctx.clearRect(0, 0, WIDTH, HEIGHT);
+					Scene.drawGlobe(globe.ctx, epoch, place);
+				} else {
+					globe = createLayer(layerCtx => Scene.drawGlobe(layerCtx, epoch, place));
+				}
 			}
-			return backgrounds.get(phase);
+			return { background: background && background.canvas, globe: globe && globe.canvas };
 		}
 
 		function frameAt(time) {
+			const epoch = epochAt(time);
 			if (!animated()) {
-				return { ...stillFrame(state, config.visualMode, hour), prevState, level, activeCount };
+				return { ...stillFrame(state, config.visualMode, epoch, place), prevState, level, activeCount };
 			}
-			return { state, prevState, elapsed: Math.max(0, time - since), t: time, level, activeCount, still: false, mode: config.visualMode, hour };
+			return { state, prevState, elapsed: Math.max(0, time - since), t: time, level, activeCount, still: false, mode: config.visualMode, epoch, place };
 		}
 
 		function paint(time) {
 			if (sized) {
 				readClock(time, false);
-				drawScene(ctx, frameAt(time), backgroundFor(Scene.phaseOf(hour)));
+				const frame = frameAt(time);
+				drawScene(ctx, frame, layersFor(frame.epoch));
 			}
 		}
 
@@ -317,5 +350,5 @@
 		});
 	}
 
-	window.CarbonBitWorld = Object.freeze({ WIDTH, HEIGHT, drawScene, drawIdleScene, createFrameScheduler, mountWorld, describeState });
+	window.CarbonBitWorld = Object.freeze({ WIDTH, HEIGHT, drawScene, drawIdleScene, createFrameScheduler, mountWorld, describeState, localPlace });
 })();

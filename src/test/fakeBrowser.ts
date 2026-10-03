@@ -8,6 +8,8 @@ import { createFakeDocument, FakeElement } from './fakeDom';
 export const root = path.resolve(__dirname, '..', '..');
 export const WORLD_SCRIPTS = ['scene.js', 'effects.js', 'renderer.js'].map(file => path.join('media', 'world', file));
 const VSYNC_MS = 1000 / 60;
+/** A fixed instant (10:30 UTC on 3 October 2026), so day and night on the planet are deterministic. */
+export const EPOCH = Date.UTC(2026, 9, 3, 10, 30);
 
 type Listener = (event: { data: unknown }) => void;
 
@@ -15,11 +17,15 @@ export class RecordingContext {
 	fillStyle = '';
 	imageSmoothingEnabled = true;
 	readonly calls: unknown[][] = [];
+	constructor(readonly label = 'main') { }
 	fillRect(x: number, y: number, w: number, h: number) {
 		this.calls.push(['fillRect', this.fillStyle, x, y, w, h]);
 	}
-	drawImage(_image: unknown, x: number, y: number) {
-		this.calls.push(['drawImage', x, y]);
+	clearRect(x: number, y: number, w: number, h: number) {
+		this.calls.push(['clearRect', '', x, y, w, h]);
+	}
+	drawImage(image: { label?: string }, x: number, y: number) {
+		this.calls.push(['drawImage', image.label ?? '', x, y]);
 	}
 	setTransform(...args: number[]) {
 		this.calls.push(['setTransform', ...args]);
@@ -27,6 +33,11 @@ export class RecordingContext {
 	count(kind: string) {
 		return this.calls.filter(c => c[0] === kind).length;
 	}
+}
+
+export interface Place {
+	lon: number;
+	south: boolean;
 }
 
 export interface Frame {
@@ -38,38 +49,67 @@ export interface Frame {
 	activeCount: number;
 	still: boolean;
 	mode?: string;
-	hour?: number;
+	epoch: number;
+	place?: Place;
+}
+
+interface Point {
+	x: number;
+	y: number;
 }
 
 export interface WorldGlobals {
 	CarbonBitScene: {
 		P: Record<string, string>;
-		PALETTES: Record<string, Record<string, string>>;
-		PHASES: readonly string[];
-		phaseOf(hour: number): string;
-		drawBackground(ctx: RecordingContext, phase: string): void;
+		WIDTH: number;
+		HEIGHT: number;
+		CX: number;
+		CY: number;
+		R: number;
+		GLOBE_STEP_MS: number;
+		MAP: Uint8Array;
+		COLS: number;
+		cellIndex(lon: number, lat: number): number;
+		sunAt(epoch: number): { lat: number; lon: number };
+		moonPhaseAt(epoch: number): number;
+		globeKey(epoch: number): number;
+		geometry(place?: Place): { you: Point; hub: Point; arc: Point[]; surface: unknown[]; rim: unknown[] };
+		drawBackground(ctx: RecordingContext): void;
+		drawGlobe(ctx: RecordingContext, epoch: number, place?: Place): void;
 	};
-	CarbonBitEffects: { drawDynamic(ctx: RecordingContext, frame: Frame): void; IDLE_SETTLE_MS: number };
+	CarbonBitEffects: { drawDynamic(ctx: RecordingContext, frame: Frame): void; IDLE_SETTLE_MS: number; C: Record<string, string> };
 	CarbonBitWorld: {
 		WIDTH: number;
 		HEIGHT: number;
 		drawScene(ctx: RecordingContext, frame: Frame): void;
-		drawIdleScene(ctx: RecordingContext, hour?: number): void;
+		drawIdleScene(ctx: RecordingContext, epoch?: number, place?: Place): void;
 		describeState(state: string, activeCount: number): string;
+		localPlace(): Place;
 	};
 }
 
 // A fake browser: virtual clock, 60 Hz animation frames, timers, visibility and media queries.
 // Loads the world scripts and sidebar.js together, driven only through host messages.
-// The wall clock (Date) is pinned to `hour` so the time-of-day sky is deterministic.
-export function createBrowser(options: { reducedMotion?: boolean; hour?: number } = {}) {
+// The wall clock (Date) is pinned to `epoch` plus the virtual time, and the timezone to `offsetMinutes`.
+export function createBrowser(options: { reducedMotion?: boolean; epoch?: number; offsetMinutes?: number; timeZone?: string } = {}) {
 	let time = 0;
-	let hour = options.hour ?? 12;
+	let epoch = options.epoch ?? EPOCH;
+	let clockReads = 0;
+	const offset = options.offsetMinutes ?? -120;
 	const FixedDate = class extends Date {
-		constructor() {
-			super(2026, 5, 1, Math.floor(hour), 0, 0);
+		constructor(...args: unknown[]) {
+			if (args.length) {
+				super(...(args as [number]));
+			} else {
+				clockReads++;
+				super(epoch + time);
+			}
+		}
+		getTimezoneOffset() {
+			return offset;
 		}
 	};
+	const FixedIntl = { DateTimeFormat: () => ({ resolvedOptions: () => ({ timeZone: options.timeZone ?? 'Europe/Rome' }) }) };
 	let nextId = 1;
 	let rafCallbacks = 0;
 	const frames = new Map<number, (now: number) => void>();
@@ -77,8 +117,8 @@ export function createBrowser(options: { reducedMotion?: boolean; hour?: number 
 	const docListeners = new Map<string, () => void>();
 	let onMessage: Listener | undefined;
 	let onMotionChange: ((event: { matches: boolean }) => void) | undefined;
-	const main = new RecordingContext();
-	const layer = new RecordingContext();
+	const main = new RecordingContext('main');
+	const layers: RecordingContext[] = [];
 	const attributes = new Map<string, string>();
 	const canvas = {
 		width: 160,
@@ -93,7 +133,14 @@ export function createBrowser(options: { reducedMotion?: boolean; hour?: number 
 	const document = {
 		hidden: false,
 		body: fakeDocument.body,
-		createElement: (tag: string) => (tag === 'canvas' ? { width: 0, height: 0, getContext: () => layer } : new FakeElement(tag)),
+		createElement: (tag: string) => {
+			if (tag !== 'canvas') {
+				return new FakeElement(tag);
+			}
+			const layer = new RecordingContext(`layer${layers.length}`);
+			layers.push(layer);
+			return { width: 0, height: 0, label: layer.label, getContext: () => layer };
+		},
 		getElementById: (id: string) => (id === 'world' ? canvas : fakeDocument.getElementById(id)),
 		addEventListener: (type: string, fn: () => void) => docListeners.set(type, fn),
 	};
@@ -126,6 +173,7 @@ export function createBrowser(options: { reducedMotion?: boolean; hour?: number 
 	};
 	const context = vm.createContext({
 		Date: FixedDate,
+		Intl: FixedIntl,
 		window,
 		document,
 		acquireVsCodeApi: () => ({ postMessage: () => undefined }),
@@ -149,7 +197,7 @@ export function createBrowser(options: { reducedMotion?: boolean; hour?: number 
 
 	return {
 		main,
-		layer,
+		layers,
 		canvas,
 		globals: window as unknown as WorldGlobals,
 		body: fakeDocument.body,
@@ -163,12 +211,14 @@ export function createBrowser(options: { reducedMotion?: boolean; hour?: number 
 			docListeners.get('visibilitychange')?.();
 		},
 		setReducedMotion: (matches: boolean) => onMotionChange?.({ matches }),
-		setHour(next: number) {
-			hour = next;
+		setEpoch(next: number) {
+			epoch = next - time;
 		},
+		clockReads: () => clockReads,
 		pending: () => frames.size + timers.size,
 		rafCallbacks: () => rafCallbacks,
-		frames: () => main.count('drawImage'),
+		/** Frames drawn on screen: one space-layer blit each. */
+		frames: () => main.calls.filter(c => c[0] === 'drawImage' && c[1] === 'layer0').length,
 		advance(ms: number) {
 			const end = time + ms;
 			for (;;) {
@@ -190,7 +240,7 @@ export function createBrowser(options: { reducedMotion?: boolean; hour?: number 
 }
 
 export function frameOf(state: string, overrides: Partial<Frame> = {}): Frame {
-	return { state, prevState: 'Idle', elapsed: 400, t: 12_345, level: 2, activeCount: 1, still: false, hour: 12, ...overrides };
+	return { state, prevState: 'Idle', elapsed: 400, t: 12_345, level: 2, activeCount: 1, still: false, epoch: EPOCH, ...overrides };
 }
 
 export function dynamicCalls(browser: ReturnType<typeof createBrowser>, frame: Frame) {
@@ -198,4 +248,3 @@ export function dynamicCalls(browser: ReturnType<typeof createBrowser>, frame: F
 	browser.globals.CarbonBitEffects.drawDynamic(ctx, frame);
 	return ctx.calls;
 }
-

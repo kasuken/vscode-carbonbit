@@ -34,7 +34,8 @@ Covers VS Code and live-provider integration that unit tests can't exercise. The
 - [ ] Hiding the sidebar (switch view or collapse) pauses rendering; showing it resumes.
 - [ ] `carbonbit.animation.enabled: false` and OS "reduce motion" show still frames.
 - [ ] `carbonbit.visualMode`: `environmental`, `neutral` (no degradation) and `minimal` (no complex animation) apply without reload.
-- [ ] The sky matches the local time of day (dawn, day, dusk, night) and the lit rooms stay readable at night.
+- [ ] The planet's day and night match the real time (your side is dark at night, with city lights), and the pin sits roughly at your timezone's longitude.
+- [ ] Each state is recognisable at sidebar size: cyan arc (request), gold glow and vapour at the data center (processing), green return and ring (response), amber light (failure).
 - [ ] Period tabs (Today, 30 days, Last month, Year) switch the footprint with mouse and arrow keys, and the choice survives hiding and showing the sidebar.
 - [ ] Pixel icons and accents (amber for CO₂e, teal for water) read well in Dark, Light and High Contrast.
 
