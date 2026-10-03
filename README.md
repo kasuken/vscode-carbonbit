@@ -7,6 +7,7 @@
 
 *A live environmental monitor for AI-assisted software development*
 
+[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/emanuelebartolesi.vscode-carbonbit?style=flat-square&label=Marketplace)](https://marketplace.visualstudio.com/items?itemName=emanuelebartolesi.vscode-carbonbit)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/kasuken/vscode-carbonbit/ci.yml?branch=main&style=flat-square&label=Build)](https://github.com/kasuken/vscode-carbonbit/actions)
 [![VS Code](https://img.shields.io/badge/VS%20Code-%3E%3D1.138-007acc?style=flat-square)](https://code.visualstudio.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-blue?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
@@ -24,6 +25,10 @@ and **water** behind each request, and shows it all in the sidebar alongside a r
 comes alive whenever an AI model is working for you.
 
 Everything runs and stays on your machine: no API keys, no telemetry, no network requests.
+
+![CarbonBit in VS Code: the sidebar with the pixel planet, live activity and today's footprint with everyday comparisons, next to the Details panel showing CO₂e and water for today, the last 30 days, the previous month and a projected year](docs/images/carbonbit.png)
+
+<sub>Sample data. The planet shows real day and night for the current time.</sub>
 
 > [!IMPORTANT]
 > CarbonBit provides **estimates, not direct measurements**. Real impact depends on model infrastructure,
@@ -85,11 +90,22 @@ from before your tools' logs begin shows "no data" instead of zero.
 
 ## Getting started
 
+### Install
+
+Install **CarbonBit** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=emanuelebartolesi.vscode-carbonbit),
+or run this in the Command Palette (<kbd>Ctrl</kbd>+<kbd>P</kbd>):
+
+```text
+ext install emanuelebartolesi.vscode-carbonbit
+```
+
+Then select the CarbonBit leaf icon in the Activity Bar. Usage from tools you already use appears within a few seconds.
+
 ### Requirements
 
 - [VS Code](https://code.visualstudio.com) 1.138 or later (CarbonBit uses the built-in `node:sqlite`, no native modules).
 - At least one [supported tool](#supported-tools) installed and used on the same machine as the VS Code extension host.
-- [Node.js](https://nodejs.org) LTS and [Git](https://git-scm.com) to build from source.
+- To build from source: [Node.js](https://nodejs.org) LTS and [Git](https://git-scm.com).
 
 ### Run from source
 

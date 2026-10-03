@@ -2,7 +2,7 @@
   "name": "vscode-carbonbit",
   "displayName": "CarbonBit",
   "description": "Estimate the energy, CO₂e and water behind your AI coding (GitHub Copilot, Claude Code, Codex) with everyday comparisons and a live 16-bit planet. Local and private.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "emanuelebartolesi",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -152,7 +152,11 @@
         "carbonbit.visualMode": {
           "type": "string",
           "default": "environmental",
-          "enum": ["environmental", "neutral", "minimal"],
+          "enum": [
+            "environmental",
+            "neutral",
+            "minimal"
+          ],
           "enumDescriptions": [
             "Pixel world with environmental cues that react to AI activity.",
             "Pixel world showing servers, electricity and cooling without environmental degradation.",
@@ -163,8 +167,20 @@
         "carbonbit.dataRetentionDays": {
           "type": "integer",
           "default": 90,
-          "enum": [7, 30, 90, 365, 0],
-          "enumItemLabels": ["7 days", "30 days", "90 days", "365 days", "Unlimited"],
+          "enum": [
+            7,
+            30,
+            90,
+            365,
+            0
+          ],
+          "enumItemLabels": [
+            "7 days",
+            "30 days",
+            "90 days",
+            "365 days",
+            "Unlimited"
+          ],
           "description": "How long locally stored AI usage history is kept. Older requests are deleted automatically. 0 keeps history indefinitely."
         }
       }

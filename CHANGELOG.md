@@ -4,6 +4,10 @@ All notable changes to the "vscode-carbonbit" extension will be documented in th
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.2] - 2026-10-03
+
+- README: a screenshot of the sidebar and the Details panel, a Marketplace badge and install instructions.
+
 ## [0.0.1] - 2026-10-03
 
 First MVP (PRD v0.1).
