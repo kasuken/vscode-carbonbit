@@ -1,890 +1,536 @@
-// Static pixel-world layer ("Two Rooms, One Wire", see docs/WORLD_ART.md): palette, geometry and
-// everything that never moves. The renderer caches drawBackground(ctx, phase) once per time-of-day
-// phase; effects.js draws the living layer on top. All drawing is integer fillRect runs.
+// "Pale Blue Pixel": the static parts of the world. A starfield, a small pixel Earth seen from
+// space with real day and night, drifting clouds, city lights and the moon in its real phase.
+// Everything is drawn with integer fillRect runs from a limited palette and ordered dithering.
 (function () {
 	'use strict';
 
 	const WIDTH = 160;
 	const HEIGHT = 90;
-	const PHASES = Object.freeze(['dawn', 'day', 'dusk', 'night']);
+	const CX = 80;
+	const CY = 47;
+	const R = 37;
+	const MOON = Object.freeze({ x: 138, y: 15, r: 5 });
 
-	// Master palette: eight short ramps. Every pixel in the world comes from here or a sky set below.
-	const RAMP = Object.freeze({
-		ink: '#1a1b29', slate0: '#2a2e43', slate1: '#434a66', slate2: '#666f8f', slate3: '#949cb5', slate4: '#c7cede', white: '#eef2f8',
-		earth0: '#38251f', earth1: '#5c3c2a', earth2: '#88593a', earth3: '#b98556', earth4: '#e2b886',
-		green0: '#1d3b31', green1: '#2c5a3d', green2: '#478147', green3: '#72ad55', green4: '#a6d66d',
-		teal0: '#4a7166', teal1: '#5f8a79', teal2: '#7fa68b',
-		rose0: '#682c37', rose1: '#9a4844', rose2: '#c66f5a',
-		skin: '#f0bf92', skinShade: '#c68862', blue: '#3e8ccf', blueDark: '#2b5e98', cyan: '#8ee4ff',
-		sun: '#ffd65a', sunCore: '#fff3c4', amber: '#ee9843', amberDim: '#a5693d', haze: '#b9a98f',
+	const P = Object.freeze({
+		space0: '#060a18', space1: '#0b1330', space2: '#14204a',
+		star: '#eef3ff', starDim: '#6f7fae', starBlue: '#9cc8ff',
+		oceanShallow: '#3f8fd0', ocean: '#2a6cb3', oceanDeep: '#1c4c8c', oceanNight: '#0a1a38',
+		grass: '#5ba344', grassDark: '#3f8233', forest: '#2f6d34', forestDark: '#225126', jungle: '#3f8f2c',
+		desert: '#dcb86c', desertDark: '#b38e4c', ice: '#eef4f8', iceShade: '#b4c6d6',
+		landNight: '#0e2117', desertNight: '#272215', iceNight: '#28324c',
+		cloud: '#f5f8fc', cloudShade: '#c4d0df', cloudNight: '#222d49',
+		city: '#ffd27a', atmo: '#8fd6ff', atmoDim: '#3c78b4',
+		moon: '#ece6cf', moonShade: '#a49d86', moonDark: '#1f2540',
 	});
 
-	// Outdoor colours are lit by the sky, so each phase tints them (a palette swap, not a filter).
-	const OUTDOOR = {
-		mtn: 'slate3', mtnShade: 'slate2', snow: 'white', snowShade: 'slate4',
-		hill: 'teal1', hillShade: 'teal0', hillLight: 'teal2',
-		pine: 'green1', pineDark: 'green0', pineLight: 'green2',
-		meadow: 'green2', meadowLight: 'green3', grass: 'green4', grassMid: 'green3', grassDark: 'green2',
-		soil: 'earth1', soilDark: 'earth0', pebble: 'earth2', pebbleLight: 'earth3',
-		leaf: 'green2', leafDark: 'green1', leafLight: 'green3', leafDeep: 'green0', trunk: 'earth1', trunkDark: 'earth0',
-		petal: 'white', petalWarm: 'sun',
-		roof: 'rose1', roofDark: 'rose0', roofLight: 'rose2',
-		log: 'earth2', logDark: 'earth1', logLight: 'earth3', logDeep: 'earth0',
-		stone: 'slate3', stoneDark: 'slate2', stoneLight: 'slate4',
-		concrete: 'slate4', concreteShade: 'slate3', concreteDark: 'slate2', concreteLight: 'white',
-		metal: 'slate2', metalDark: 'slate1', metalLight: 'slate3', metalDeep: 'slate0',
-		tank: 'slate4', tankShade: 'slate3', tankDark: 'slate2', tankLight: 'white', tankMark: 'blue',
-		pole: 'earth1', poleLight: 'earth2', insulator: 'slate4', cable: 'ink',
-		pipe: 'slate3', pipeDark: 'slate1', pipeLight: 'slate4',
-		conduit: 'slate1', conduitCore: 'slate0',
-		vapor: 'white', vaporFade: 'slate4', haze: 'haze', bird: 'slate0', birdBeak: 'amber',
-	};
-
-	// Lit interiors and signal colours never change with the hour.
-	const FIXED = {
-		wall: 'earth4', wallShade: 'earth3', wainscot: 'earth2', trim: 'earth1', floor: 'earth2', floorDark: 'earth1',
-		desk: 'earth3', deskTop: 'earth4', deskDark: 'earth1',
-		bezel: 'ink', screen: 'slate0', screenGlow: 'slate1', codeA: 'cyan', codeB: 'green4', codeC: 'sun', codeDim: 'slate2',
-		hair: 'earth0', hairLight: 'earth1', skin: 'skin', skinShade: 'skinShade', hood: 'blue', hoodDark: 'blueDark',
-		chair: 'slate1', chairDark: 'slate0', chairLight: 'slate2',
-		mug: 'white', mugShade: 'slate4', plant: 'green3', plantDark: 'green2', pot: 'rose1', potDark: 'rose0',
-		router: 'slate1', routerDark: 'slate0',
-		dcWall: 'slate0', dcSeam: 'ink', rack: 'ink', unit: 'slate1', unitShade: 'slate0', rackCap: 'slate2',
-		tray: 'slate2', trayDark: 'slate1', tile: 'slate1', tileSeam: 'slate0', tileLit: 'slate2', ceilingLamp: 'slate4',
-		lampOff: 'slate1', ledDim: 'green1', led: 'green4', ledBusy: 'cyan',
-		data: 'cyan', dataTrail: 'blue', reply: 'green4', replyTrail: 'green2',
-		power: 'sun', powerTrail: 'amber', water: 'cyan', waterTrail: 'blue',
-		warn: 'amber', warnDim: 'amberDim', done: 'green4',
-	};
-
-	// Hand-tuned skies (zenith to horizon) and cloud ramps (light, body, shade) per phase.
-	const SKIES = Object.freeze({
-		dawn: { sky: ['#3b4886', '#68669f', '#a9809f', '#dd9e93', '#f4c9a3'], cloud: ['#fde9da', '#e9b9b1', '#a98aa9'], tint: ['#f2a08c', 0.12] },
-		day: { sky: ['#3f6cc0', '#5486d6', '#72a3e4', '#98c4ef', '#c3e1f5'], cloud: ['#ffffff', '#dce7f6', '#a8bfe0'], tint: null },
-		dusk: { sky: ['#252a5c', '#463c7c', '#83508a', '#c7706e', '#eda16e'], cloud: ['#f6c39a', '#c47f86', '#6b4b7a'], tint: ['#57305e', 0.3] },
-		night: { sky: ['#0b1024', '#10183a', '#162248', '#1d2c57', '#263866'], cloud: ['#4a5682', '#37436c', '#29345a'], tint: ['#0d1530', 0.58] },
-	});
-
-	function phaseOf(hour) {
-		if (typeof hour !== 'number' || !Number.isFinite(hour)) {
-			return 'day';
-		}
-		const h = ((Math.floor(hour) % 24) + 24) % 24;
-		if (h >= 5 && h < 7) {
-			return 'dawn';
-		}
-		if (h >= 7 && h < 18) {
-			return 'day';
-		}
-		if (h >= 18 && h < 20) {
-			return 'dusk';
-		}
-		return 'night';
+	// 4x4 ordered dither thresholds in [0, 1).
+	const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => (v + 0.5) / 16);
+	function bayer(x, y) {
+		return BAYER[(y & 3) * 4 + (x & 3)];
 	}
 
-	function mix(a, b, t) {
-		const channel = (hex, i) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
-		let out = '#';
-		for (let i = 0; i < 3; i++) {
-			const v = Math.round(channel(a, i) + (channel(b, i) - channel(a, i)) * t);
-			out += v.toString(16).padStart(2, '0');
-		}
-		return out;
+	function hash(a, b) {
+		let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0;
+		h = Math.imul(h ^ (h >>> 13), 1274126177);
+		return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 	}
 
-	function buildPalette(phase) {
-		const sky = SKIES[phase];
-		const pal = {};
-		for (const [key, ramp] of Object.entries(OUTDOOR)) {
-			pal[key] = sky.tint ? mix(RAMP[ramp], sky.tint[0], sky.tint[1]) : RAMP[ramp];
+	// ---- Earth map: coarse continents as [lon, lat] polygons, rasterised to 2-degree cells. ----
+	const LAND = [
+		// North America
+		[[-168, 66], [-162, 70], [-156, 71.5], [-140, 70], [-128, 70], [-115, 68], [-95, 69], [-85, 70], [-80, 63], [-90, 58], [-95, 60],
+			[-82, 53], [-79, 52], [-75, 62], [-65, 60], [-60, 55], [-56, 52], [-60, 47], [-66, 44], [-70, 42], [-74, 40], [-76, 35], [-81, 31],
+			[-80, 25], [-83, 29], [-89, 30], [-95, 29], [-97, 26], [-97, 22], [-94, 18], [-90, 21], [-87, 21], [-88, 16], [-84, 15], [-83, 10],
+			[-79, 9], [-80, 7], [-85, 10], [-92, 14], [-96, 16], [-105, 20], [-112, 28], [-117, 32], [-121, 35], [-124, 40], [-124, 46],
+			[-123, 49], [-130, 55], [-136, 58], [-145, 60], [-152, 59], [-158, 57], [-165, 55], [-160, 59], [-165, 62]],
+		[[-80, 63], [-62, 66], [-70, 71], [-80, 73], [-90, 72]],
+		[[-90, 76], [-62, 82], [-80, 83], [-95, 80]],
+		[[-118, 69], [-102, 69], [-102, 73], [-118, 73]],
+		[[-85, 22], [-80, 23], [-74, 20], [-78, 20]],
+		// South America
+		[[-80, 9], [-75, 11], [-63, 11], [-52, 5], [-50, 0], [-35, -5], [-35, -9], [-39, -14], [-41, -22], [-48, -26], [-53, -34], [-58, -38],
+			[-65, -41], [-66, -47], [-69, -52], [-73, -53], [-75, -47], [-73, -38], [-71, -30], [-70, -18], [-76, -14], [-81, -5], [-80, 0],
+			[-78, 3], [-77, 7]],
+		// Eurasia
+		[[-9, 43], [-9, 37], [-5, 36], [0, 38], [3, 42], [8, 44], [12, 42], [16, 38], [18, 40], [13, 45], [19, 42], [23, 37], [26, 40], [29, 41],
+			[36, 36], [35, 32], [34, 28], [39, 22], [43, 13], [52, 16], [57, 19], [59, 22], [56, 26], [52, 24], [48, 30], [50, 30], [57, 26],
+			[62, 25], [67, 25], [73, 21], [77, 8], [80, 13], [80, 16], [87, 22], [92, 22], [94, 17], [98, 16], [98, 8], [103, 1], [104, 1.5],
+			[101, 7], [100, 13], [105, 9], [109, 12], [108, 16], [106, 20], [110, 21], [117, 23], [121, 28], [122, 31], [120, 36], [122, 37],
+			[118, 38], [121, 40], [125, 40], [127, 35], [129, 35], [130, 43], [135, 44], [140, 48], [141, 53], [137, 54], [143, 59], [155, 59],
+			[156, 51], [163, 57], [163, 61], [170, 60], [180, 65], [180, 69], [170, 70], [160, 71], [150, 72], [140, 73], [130, 71], [120, 73],
+			[113, 74], [105, 78], [95, 76], [87, 75], [80, 73], [70, 73], [67, 69], [60, 69], [55, 68], [45, 68], [40, 66], [35, 69], [28, 71],
+			[20, 70], [15, 68], [12, 65], [8, 63], [5, 61], [5, 58], [8, 58], [10, 59], [12, 56], [10, 55], [9, 57], [8, 54], [4, 52], [2, 51],
+			[-2, 48], [-4, 48], [-1, 46], [-2, 43.5]],
+		[[-5, 50], [1, 51], [2, 53], [-1, 55], [-2, 58], [-5, 58.5], [-6, 56], [-5, 54], [-3, 53], [-5, 52]],
+		[[-10, 52], [-6, 52], [-6, 55], [-8, 55], [-10, 54]],
+		[[-24, 64], [-22, 66], [-14, 66], [-14, 64], [-20, 63.5]],
+		[[130, 31], [132, 34], [136, 34], [140, 35], [141, 38], [142, 42], [145, 44], [141, 45], [140, 41], [139, 38], [136, 37], [133, 35], [130, 34]],
+		[[95, 5], [98, 4], [106, -6], [104, -5], [96, 3]],
+		[[109, 1], [111, -3], [116, -4], [119, 1], [117, 7], [115, 5]],
+		[[105, -6], [114, -7], [114, -8.5], [106, -7]],
+		[[131, -1], [141, -3], [150, -10], [143, -9], [138, -8], [132, -4]],
+		[[120, 18], [122, 18], [126, 7], [122, 7], [120, 12]],
+		// Africa
+		[[-17, 21], [-16, 28], [-10, 30], [-6, 36], [0, 36], [10, 37], [11, 34], [20, 31], [25, 32], [32, 31], [34, 28], [37, 20], [43, 12],
+			[51, 12], [48, 5], [40, -3], [40, -11], [35, -20], [33, -26], [28, -33], [20, -35], [18, -32], [12, -18], [13, -10], [9, -1], [9, 4],
+			[4, 6], [-5, 5], [-10, 6], [-15, 11], [-17, 15]],
+		[[44, -25], [47, -25], [50, -15], [49, -12], [44, -17]],
+		// Oceania
+		[[114, -22], [114, -34], [118, -35], [124, -34], [131, -31], [135, -35], [138, -35], [141, -38], [146, -39], [150, -37], [153, -31],
+			[153, -25], [150, -22], [146, -19], [145, -15], [142, -11], [141, -17], [136, -12], [132, -11], [130, -15], [125, -15], [122, -18], [118, -20]],
+		[[172, -34], [178, -38], [176, -41], [171, -46], [167, -46], [171, -41], [174, -38]],
+	];
+	const WATER = [
+		[[47, 45], [53, 45], [54, 40], [53, 37], [50, 37], [49, 40]],
+		[[28, 45], [33, 46], [38, 47], [41, 42], [36, 41], [29, 41]],
+	];
+	const ICE = [
+		[[-73, 78], [-60, 82], [-30, 83], [-20, 80], [-20, 72], [-30, 68], [-42, 60], [-50, 64], [-55, 70], [-68, 76]],
+		[[-180, -90], [180, -90], [180, -70], [150, -68], [120, -66], [90, -66], [60, -67], [30, -69], [0, -70], [-30, -75], [-60, -73],
+			[-60, -64], [-65, -66], [-75, -72], [-100, -73], [-140, -76], [-180, -78]],
+	];
+	const DESERT = [
+		[[-15, 18], [-15, 28], [0, 31], [30, 31], [35, 22], [35, 15], [15, 15], [0, 16]],
+		[[36, 30], [47, 30], [56, 22], [52, 17], [43, 17], [38, 24]],
+		[[55, 45], [75, 45], [110, 45], [110, 40], [90, 37], [60, 37]],
+		[[118, -20], [135, -18], [143, -25], [140, -32], [122, -30]],
+		[[-118, 35], [-104, 35], [-104, 28], [-112, 28]],
+	];
+	const CITIES = [
+		[-74, 41], [-118, 34], [-88, 42], [-79, 44], [-99, 19], [-47, -24], [-58, -35], [-74, 5], [-77, -12], [0, 51], [2, 49], [-4, 40],
+		[13, 52], [12, 42], [37, 56], [29, 41], [31, 30], [3, 6], [28, -26], [37, -1], [55, 25], [51, 36], [67, 25], [77, 29], [73, 19],
+		[88, 23], [90, 24], [100, 14], [104, 1], [107, -6], [121, 15], [121, 31], [116, 40], [127, 37], [140, 36], [135, 35], [151, -34],
+		[145, -38], [-122, 47], [-95, 30], [-84, 34], [-122, 38], [-80, 26], [114, 22], [104, 31], [74, 31], [9, 45], [19, 50], [-43, -23],
+	];
+
+	const COLS = 180;
+	const ROWS = 90;
+	const T = Object.freeze({ deep: 0, shallow: 1, grass: 2, grassVar: 3, forest: 4, jungle: 5, desert: 6, ice: 7 });
+	// [lit, shade, night] per surface type, then clouds.
+	const SHADES = [
+		[P.ocean, P.oceanDeep, P.oceanNight],
+		[P.oceanShallow, P.ocean, P.oceanNight],
+		[P.grass, P.grassDark, P.landNight],
+		[P.grassDark, P.forest, P.landNight],
+		[P.forest, P.forestDark, P.landNight],
+		[P.jungle, P.forest, P.landNight],
+		[P.desert, P.desertDark, P.desertNight],
+		[P.ice, P.iceShade, P.iceNight],
+	];
+	const CLOUD_SHADES = [P.cloud, P.cloudShade, P.cloudNight];
+
+	function inPolygon(lon, lat, poly) {
+		let inside = false;
+		for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+			const [xi, yi] = poly[i];
+			const [xj, yj] = poly[j];
+			if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) {
+				inside = !inside;
+			}
 		}
-		for (const [key, ramp] of Object.entries(FIXED)) {
-			pal[key] = RAMP[ramp];
-		}
-		sky.sky.forEach((color, i) => {
-			pal[`sky${i}`] = color;
-		});
-		sky.cloud.forEach((color, i) => {
-			pal[`cloud${i}`] = color;
-		});
-		pal.sun = RAMP.sun;
-		pal.sunCore = RAMP.sunCore;
-		pal.moon = '#e9ecd6';
-		pal.moonShade = '#b3b8a6';
-		pal.star = '#e2e8ff';
-		pal.starDim = '#7c88ba';
-		// The house window shows the same sky as outside.
-		pal.glass = sky.sky[3];
-		pal.glassLight = sky.sky[4];
-		return Object.freeze(pal);
+		return inside;
 	}
 
-	const PALETTES = Object.freeze(Object.fromEntries(PHASES.map(phase => [phase, buildPalette(phase)])));
-
-	function palette(phase) {
-		return PALETTES[phase] || PALETTES.day;
+	function boxed(polys) {
+		return polys.map(poly => ({
+			poly,
+			minLon: Math.min(...poly.map(p => p[0])), maxLon: Math.max(...poly.map(p => p[0])),
+			minLat: Math.min(...poly.map(p => p[1])), maxLat: Math.max(...poly.map(p => p[1])),
+		}));
 	}
 
-	// --- Geometry shared with effects.js (logical pixels) -------------------------------------------
+	function inAny(lon, lat, polys) {
+		return polys.some(b => lon >= b.minLon && lon <= b.maxLon && lat >= b.minLat && lat <= b.maxLat && inPolygon(lon, lat, b.poly));
+	}
 
-	const GROUND_Y = 76;
-	const RACK_X = Object.freeze([91, 100, 109, 118, 127, 136]);
-	const UNIT_Y = Object.freeze([54, 57, 60, 63, 66]);
-	const COOLERS = Object.freeze([125, 109, 93]);
+	function cellIndex(lon, lat) {
+		const wrapped = ((((lon + 180) % 360) + 360) % 360);
+		const col = Math.min(COLS - 1, Math.floor(wrapped / 2));
+		const row = Math.min(ROWS - 1, Math.max(0, Math.floor((90 - lat) / 2)));
+		return row * COLS + col;
+	}
 
-	// Developer seen from behind, at (23, 56). h hair, s skin, b hoodie, w/c/C chair.
-	const DEVELOPER = Object.freeze({
-		x: 23,
-		y: 56,
-		legend: { h: 'hair', H: 'hairLight', s: 'skin', S: 'skinShade', b: 'hood', B: 'hoodDark', w: 'chairLight', c: 'chair', C: 'chairDark' },
-		rows: [
-			'       hhhh       ',
-			'     hHHhhhhh     ',
-			'    hHHhhhhhhh    ',
-			'    shHhhhhhhs    ',
-			'    Shhhhhhhhs    ',
-			'     hhhhhhhh     ',
-			'     bBSssSBb     ',
-			'   bbbBBBBBBbbb   ',
-			'  bbbbbBBBBbbbbb  ',
-			'  Bbbbbbbbbbbbbb  ',
-			'  Bbbwwwwwwwwbbb  ',
-			'  BbBccccccccbBb  ',
-			'   BBccccccccBB   ',
-			'   CCCCCCCCCCCC   ',
-		],
-	});
-
-	const SCREEN = Object.freeze({ x: 25, y: 50, w: 14, h: 10 });
-
-	// Screen pixels not hidden by the developer's head, as [x, y, w] runs per row.
-	function screenSpans() {
-		const spans = [];
-		for (let y = SCREEN.y; y < SCREEN.y + SCREEN.h; y++) {
-			const row = DEVELOPER.rows[y - DEVELOPER.y] || '';
-			let start = -1;
-			for (let x = SCREEN.x; x <= SCREEN.x + SCREEN.w; x++) {
-				const open = x < SCREEN.x + SCREEN.w && (row[x - DEVELOPER.x] || ' ') === ' ';
-				if (open && start < 0) {
-					start = x;
-				} else if (!open && start >= 0) {
-					spans.push(Object.freeze([start, y, x - start]));
-					start = -1;
+	function buildMap() {
+		const land = boxed(LAND);
+		const water = boxed(WATER);
+		const ice = boxed(ICE);
+		const desert = boxed(DESERT);
+		const isLand = new Uint8Array(COLS * ROWS);
+		for (let row = 0; row < ROWS; row++) {
+			const lat = 89 - row * 2;
+			for (let col = 0; col < COLS; col++) {
+				const lon = -179 + col * 2;
+				isLand[row * COLS + col] = (inAny(lon, lat, land) && !inAny(lon, lat, water)) || inAny(lon, lat, ice) ? 1 : 0;
+			}
+		}
+		const types = new Uint8Array(COLS * ROWS);
+		for (let row = 0; row < ROWS; row++) {
+			const lat = 89 - row * 2;
+			for (let col = 0; col < COLS; col++) {
+				const lon = -179 + col * 2;
+				const i = row * COLS + col;
+				if (!isLand[i]) {
+					let coast = false;
+					for (let dr = -1; dr <= 1 && !coast; dr++) {
+						for (let dc = -1; dc <= 1 && !coast; dc++) {
+							const r = row + dr;
+							coast = r >= 0 && r < ROWS && isLand[r * COLS + ((col + dc + COLS) % COLS)] === 1;
+						}
+					}
+					types[i] = coast ? T.shallow : T.deep;
+				} else if (inAny(lon, lat, ice) || Math.abs(lat) >= 72) {
+					types[i] = T.ice;
+				} else if (inAny(lon, lat, desert)) {
+					types[i] = T.desert;
+				} else if (lat > 52) {
+					types[i] = T.forest;
+				} else if (Math.abs(lat) < 12) {
+					types[i] = T.jungle;
+				} else {
+					types[i] = hash(col, row) < 0.3 ? T.grassVar : T.grass;
 				}
 			}
 		}
-		return Object.freeze(spans);
+		return types;
 	}
 
-	function sag(x0, y0, x1, y1, depth, steps) {
-		const points = [];
-		for (let i = 0; i <= steps; i++) {
-			const u = i / steps;
-			points.push([Math.round(x0 + (x1 - x0) * u), Math.round(y0 + (y1 - y0) * u + 4 * depth * u * (1 - u))]);
+	// Value noise that wraps around the globe, weighted by latitude: wet tropics and
+	// mid-latitude storm tracks, drier subtropics. 0 = clear, 1 = thin, 2 = dense.
+	function buildClouds() {
+		function lattice(spacing, salt) {
+			const cols = COLS / spacing;
+			return (row, col) => {
+				const fy = row / spacing;
+				const fx = col / spacing;
+				const y0 = Math.floor(fy);
+				const x0 = Math.floor(fx);
+				const ty = fy - y0;
+				const tx = fx - x0;
+				const v = (y, x) => hash(((x % cols) + cols) % cols + salt, y + salt * 7);
+				const sy = ty * ty * (3 - 2 * ty);
+				const sx = tx * tx * (3 - 2 * tx);
+				const top = v(y0, x0) * (1 - sx) + v(y0, x0 + 1) * sx;
+				const bottom = v(y0 + 1, x0) * (1 - sx) + v(y0 + 1, x0 + 1) * sx;
+				return top * (1 - sy) + bottom * sy;
+			};
 		}
-		return points;
-	}
-
-	function line(x0, y0, x1, y1) {
-		const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
-		const points = [];
-		for (let i = 0; i <= n; i++) {
-			points.push([Math.round(x0 + ((x1 - x0) * i) / Math.max(1, n)), Math.round(y0 + ((y1 - y0) * i) / Math.max(1, n))]);
+		const coarse = lattice(10, 11);
+		const fine = lattice(5, 29);
+		const finer = lattice(3, 47);
+		const field = new Uint8Array(COLS * ROWS);
+		for (let row = 0; row < ROWS; row++) {
+			const lat = Math.abs(89 - row * 2);
+			const weight = 0.55 + 0.3 * Math.exp(-((lat / 9) ** 2)) + 0.25 * Math.exp(-(((lat - 55) / 12) ** 2)) - 0.2 * Math.exp(-(((lat - 24) / 8) ** 2));
+			for (let col = 0; col < COLS; col++) {
+				const n = (0.55 * coarse(row, col) + 0.3 * fine(row, col) + 0.15 * finer(row, col)) * weight;
+				field[row * COLS + col] = n > 0.47 ? 2 : n > 0.42 ? 1 : 0;
+			}
 		}
-		return points;
+		return field;
 	}
 
-	// Concatenates segments into one 8-connected pixel path without repeats.
-	function path(...segments) {
-		const out = [];
-		for (const segment of segments) {
-			for (const [x, y] of segment) {
-				const last = out[out.length - 1];
-				if (last && last[0] === x && last[1] === y) {
+	const MAP = buildMap();
+	const CLOUDS = buildClouds();
+	const CITY_CELLS = new Set(CITIES.map(([lon, lat]) => cellIndex(lon, lat)));
+
+	// ---- Sun and moon from the wall clock (simple almanac, good to about a degree). ----
+	const DEG = Math.PI / 180;
+	const DAY_MS = 86_400_000;
+	function sunAt(epoch) {
+		const date = new Date(epoch);
+		const startOfYear = Date.UTC(date.getUTCFullYear(), 0, 1);
+		const dayOfYear = (epoch - startOfYear) / DAY_MS;
+		const declination = -23.44 * Math.cos((2 * Math.PI * (dayOfYear + 10)) / 365);
+		const utcHours = (epoch % DAY_MS) / 3_600_000;
+		return { lat: declination, lon: -15 * (utcHours - 12) };
+	}
+
+	const NEW_MOON_EPOCH = Date.UTC(2000, 0, 6, 18, 14);
+	const SYNODIC_MS = 29.530588853 * DAY_MS;
+	function moonPhaseAt(epoch) {
+		return ((((epoch - NEW_MOON_EPOCH) % SYNODIC_MS) + SYNODIC_MS) % SYNODIC_MS) / SYNODIC_MS;
+	}
+
+	function unit(lat, lon) {
+		return [Math.cos(lat * DEG) * Math.cos(lon * DEG), Math.cos(lat * DEG) * Math.sin(lon * DEG), Math.sin(lat * DEG)];
+	}
+
+	// ---- Where things are. `place` is the viewer's approximate position from the timezone. ----
+	const DEFAULT_PLACE = Object.freeze({ lon: 0, south: false });
+	// Regions where large cloud data centers cluster. The hub is drawn at the one about a fifth of the
+	// way round the planet from you, preferring east or west, so the arc reads well; it is illustrative, not where your
+	// requests actually ran.
+	const HUB_REGIONS = [
+		[-77, 39], [-120, 45], [-94, 41], [-6, 53], [8, 50], [5, 52], [104, 1], [140, 36], [151, -34], [73, 19], [-47, -23], [28, -26],
+	];
+	const HUB_DISTANCE = 70;
+	// East-west pairs make cleaner arcs than north-south ones.
+	const HUB_LATITUDE_WEIGHT = 0.6;
+	const ARC_SAMPLES = 40;
+	const ARC_LIFT = 0.15;
+	// Screen-space arch on top of the 3D lift, like a flight path drawn on a map.
+	const ARC_ARCH = 17;
+	const geometries = new Map();
+
+	function placeOf(place) {
+		const lon = place && Number.isFinite(place.lon) ? Math.round(Math.max(-180, Math.min(180, place.lon))) : 0;
+		return { lon, south: Boolean(place && place.south) };
+	}
+
+	function geometry(rawPlace) {
+		const place = placeOf(rawPlace);
+		const key = `${place.lon}:${place.south}`;
+		if (geometries.has(key)) {
+			return geometries.get(key);
+		}
+		const youLat = place.south ? -33 : 46;
+		const a = unit(youLat, place.lon);
+		const angle = (v, w) => Math.acos(Math.max(-1, Math.min(1, v[0] * w[0] + v[1] * w[1] + v[2] * w[2]))) / DEG;
+		const hub = HUB_REGIONS
+			.map(([lon, lat]) => ({ lon, lat, off: Math.abs(angle(a, unit(lat, lon)) - HUB_DISTANCE) + HUB_LATITUDE_WEIGHT * Math.abs(lat - youLat) }))
+			.reduce((best, region) => (region.off < best.off ? region : best));
+		const b = unit(hub.lat, hub.lon);
+		// Look at the midpoint of you and the hub, tilted a little toward your pole.
+		const mid = [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+		const lon0 = Math.atan2(mid[1], mid[0]) / DEG;
+		const lat0 = Math.asin(mid[2] / Math.hypot(...mid)) / DEG + (place.south ? -6 : 6);
+		const sin0 = Math.sin(lat0 * DEG);
+		const cos0 = Math.cos(lat0 * DEG);
+
+		function project(v, lift) {
+			const lat = Math.asin(Math.max(-1, Math.min(1, v[2]))) / DEG;
+			const dLon = Math.atan2(v[1], v[0]) - lon0 * DEG;
+			const cl = Math.cos(lat * DEG);
+			const x = cl * Math.sin(dLon);
+			const y = cos0 * Math.sin(lat * DEG) - sin0 * cl * Math.cos(dLon);
+			return { x: Math.floor(CX + x * R * lift), y: Math.floor(CY - y * R * lift) };
+		}
+
+		// Inverse orthographic projection, once per pixel of the disk.
+		const surface = [];
+		const rim = [];
+		for (let py = CY - R - 2; py <= CY + R + 2; py++) {
+			for (let px = CX - R - 2; px <= CX + R + 2; px++) {
+				const dx = (px + 0.5 - CX) / R;
+				const dy = (py + 0.5 - CY) / R;
+				const r2 = dx * dx + dy * dy;
+				if (r2 <= 1) {
+					const X = dx;
+					const Y = -dy;
+					const Z = Math.sqrt(1 - r2);
+					const lat = Math.asin(Z * sin0 + Y * cos0) / DEG;
+					const lon = lon0 + Math.atan2(X, Z * cos0 - Y * sin0) / DEG;
+					surface.push({ x: px, y: py, z: Z, lat, lon, normal: unit(lat, lon), cell: cellIndex(lon, lat) });
+				} else if (r2 <= ((R + 1.3) / R) ** 2) {
+					const len = Math.sqrt(r2);
+					const X = dx / len;
+					const Y = -dy / len;
+					const lat = Math.asin(Y * cos0) / DEG;
+					const lon = lon0 + Math.atan2(X, -Y * sin0) / DEG;
+					rim.push({ x: px, y: py, normal: unit(lat, lon), outer: r2 > ((R + 0.6) / R) ** 2 });
+				}
+			}
+		}
+
+		const omega = Math.acos(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]);
+		// The arch bulges sideways from the chord, on the side facing away from the planet's centre
+		// (upwards when the chord runs through it), so the arc always lifts off the surface.
+		const start = project(a, 1);
+		const end = project(b, 1);
+		const chord = Math.hypot(end.x - start.x, end.y - start.y) || 1;
+		let nx = (end.y - start.y) / chord;
+		let ny = (start.x - end.x) / chord;
+		const flip = Math.abs(ny) > 0.5 ? ny > 0 : nx * ((start.x + end.x) / 2 - CX) < 0 || (nx < 0 && Math.abs((start.x + end.x) / 2 - CX) < 1);
+		if (flip) {
+			nx = -nx;
+			ny = -ny;
+		}
+		const arc = [];
+		for (let i = 0; i <= ARC_SAMPLES; i++) {
+			const u = i / ARC_SAMPLES;
+			const wa = Math.sin((1 - u) * omega) / Math.sin(omega);
+			const wb = Math.sin(u * omega) / Math.sin(omega);
+			const lifted = project([a[0] * wa + b[0] * wb, a[1] * wa + b[1] * wb, a[2] * wa + b[2] * wb], 1 + ARC_LIFT * Math.sin(Math.PI * u));
+			const bump = ARC_ARCH * Math.sin(Math.PI * u);
+			const point = { x: lifted.x + Math.round(nx * bump), y: lifted.y + Math.round(ny * bump) };
+			const last = arc[arc.length - 1];
+			if (!last || last.x !== point.x || last.y !== point.y) {
+				arc.push(point);
+			}
+		}
+		const result = Object.freeze({ place, surface, rim, arc: Object.freeze(arc), you: arc[0], hub: arc[arc.length - 1] });
+		geometries.set(key, result);
+		return result;
+	}
+
+	// ---- Drawing ----
+	// Consecutive pixels of one colour on a row become one rect.
+	function createRuns(ctx) {
+		let color = null;
+		let x0 = 0;
+		let y0 = 0;
+		let x1 = 0;
+		function flush() {
+			if (color !== null) {
+				ctx.fillStyle = color;
+				ctx.fillRect(x0, y0, x1 - x0, 1);
+			}
+			color = null;
+		}
+		return {
+			put(x, y, c) {
+				if (c === color && y === y0 && x === x1) {
+					x1++;
+					return;
+				}
+				flush();
+				color = c;
+				x0 = x;
+				y0 = y;
+				x1 = x + 1;
+			},
+			flush,
+		};
+	}
+
+	const STARS = (() => {
+		const stars = [];
+		for (let i = 0; stars.length < 46 && i < 400; i++) {
+			const x = Math.floor(hash(i, 3) * WIDTH);
+			const y = Math.floor(hash(i, 5) * HEIGHT);
+			const near = (x + 0.5 - CX) ** 2 + (y + 0.5 - CY) ** 2 < (R + 5) ** 2;
+			const moon = Math.abs(x - MOON.x) < 9 && Math.abs(y - MOON.y) < 9;
+			if (!near && !moon) {
+				const kind = hash(i, 9);
+				stars.push({ x, y, color: kind < 0.15 ? P.starBlue : kind < 0.45 ? P.star : P.starDim, big: kind > 0.96 });
+			}
+		}
+		return Object.freeze(stars);
+	})();
+
+	// Space: two dithered bands of night and a faint glow hugging the planet; then the stars.
+	function drawBackground(ctx) {
+		ctx.fillStyle = P.space0;
+		ctx.fillRect(0, 0, WIDTH, HEIGHT);
+		const runs = createRuns(ctx);
+		for (let y = 0; y < HEIGHT; y++) {
+			for (let x = 0; x < WIDTH; x++) {
+				const d = Math.sqrt((x + 0.5 - CX) ** 2 + (y + 0.5 - CY) ** 2) - R;
+				const glow = d < 6 ? 1 - d / 6 : 0;
+				const band = y / HEIGHT;
+				let c = null;
+				if (glow > bayer(x, y) * 1.2) {
+					c = glow > 0.6 ? P.space2 : P.space1;
+				} else if (band > 0.55 + bayer(x, y) * 0.5) {
+					c = P.space1;
+				}
+				if (c) {
+					runs.put(x, y, c);
+				}
+			}
+		}
+		runs.flush();
+		for (const star of STARS) {
+			ctx.fillStyle = star.color;
+			ctx.fillRect(star.x, star.y, 1, 1);
+			if (star.big) {
+				ctx.fillStyle = P.starDim;
+				ctx.fillRect(star.x - 1, star.y, 1, 1);
+				ctx.fillRect(star.x + 1, star.y, 1, 1);
+				ctx.fillRect(star.x, star.y - 1, 1, 1);
+				ctx.fillRect(star.x, star.y + 1, 1, 1);
+			}
+		}
+	}
+
+	// Light bands: lit, shade and night, with dithered edges at the terminator.
+	function band(s, x, y, z) {
+		let level;
+		if (s > 0.3) {
+			level = 0;
+		} else if (s > 0.08) {
+			level = (s - 0.08) / 0.22 > bayer(x, y) ? 0 : 1;
+		} else if (s > -0.1) {
+			level = (s + 0.1) / 0.18 > bayer(x, y) ? 1 : 2;
+		} else {
+			level = 2;
+		}
+		// The limb is one step darker, which rounds the sphere.
+		return level === 0 && z < 0.24 ? 1 : level;
+	}
+
+	const CLOUD_MS_PER_DEGREE = 6000;
+	// The globe changes slowly (sun 1 degree per 4 minutes, clouds 1 degree per 6 seconds).
+	const GLOBE_STEP_MS = 4000;
+
+	function globeKey(epoch) {
+		return Math.floor(epoch / GLOBE_STEP_MS);
+	}
+
+	function drawGlobe(ctx, epoch, rawPlace) {
+		const geo = geometry(rawPlace);
+		const at = globeKey(epoch) * GLOBE_STEP_MS;
+		const sun = unit(sunAt(at).lat, sunAt(at).lon);
+		const drift = Math.floor(at / CLOUD_MS_PER_DEGREE / 2) % COLS;
+		const runs = createRuns(ctx);
+		for (const p of geo.surface) {
+			const n = p.normal;
+			const s = n[0] * sun[0] + n[1] * sun[1] + n[2] * sun[2];
+			const level = band(s, p.x, p.y, p.z);
+			const row = Math.floor(p.cell / COLS);
+			const col = p.cell % COLS;
+			const cloud = CLOUDS[row * COLS + ((col - drift + COLS) % COLS)];
+			let color;
+			if (cloud === 2) {
+				color = CLOUD_SHADES[level];
+			} else if (cloud === 1 && bayer(p.x, p.y) < 0.75) {
+				// Thin cloud edges: one step greyer, so clouds read soft instead of checkered.
+				color = CLOUD_SHADES[Math.min(2, level + 1)];
+			} else if (level === 2 && s < -0.06 && CITY_CELLS.has(p.cell)) {
+				color = P.city;
+			} else {
+				color = SHADES[MAP[p.cell]][level];
+			}
+			runs.put(p.x, p.y, color);
+		}
+		runs.flush();
+		for (const p of geo.rim) {
+			const n = p.normal;
+			const s = n[0] * sun[0] + n[1] * sun[1] + n[2] * sun[2];
+			if (s > 0.05 && !p.outer) {
+				ctx.fillStyle = P.atmo;
+				ctx.fillRect(p.x, p.y, 1, 1);
+			} else if (s > -0.2 && (!p.outer || bayer(p.x, p.y) < 0.5)) {
+				ctx.fillStyle = P.atmoDim;
+				ctx.fillRect(p.x, p.y, 1, 1);
+			}
+		}
+		drawMoon(ctx, moonPhaseAt(at));
+	}
+
+	function drawMoon(ctx, phase) {
+		const runs = createRuns(ctx);
+		const lit = Math.cos(2 * Math.PI * phase);
+		for (let y = MOON.y - MOON.r; y <= MOON.y + MOON.r; y++) {
+			for (let x = MOON.x - MOON.r; x <= MOON.x + MOON.r; x++) {
+				const mx = (x + 0.5 - MOON.x) / MOON.r;
+				const my = (y + 0.5 - MOON.y) / MOON.r;
+				if (mx * mx + my * my > 1) {
 					continue;
 				}
-				if (last && (Math.abs(last[0] - x) > 1 || Math.abs(last[1] - y) > 1)) {
-					out.push(...line(last[0], last[1], x, y).slice(1, -1));
-				}
-				out.push([x, y]);
+				const w = Math.sqrt(1 - my * my);
+				const on = phase < 0.5 ? mx > lit * w : mx < -lit * w;
+				const crater = (x - MOON.x === -2 && y - MOON.y === -1) || (x - MOON.x === 1 && y - MOON.y === 2) || (x - MOON.x === 2 && y - MOON.y === -2);
+				runs.put(x, y, on ? (crater ? P.moonShade : P.moon) : P.moonDark);
 			}
 		}
-		return Object.freeze(out.map(p => Object.freeze(p)));
-	}
-
-	// Data: router -> wall -> wire over the pole -> data center cable tray.
-	const LINK = path(line(45, 50, 50, 50), sag(50, 50, 63, 41, 1.5, 26), line(63, 41, 70, 41), sag(70, 41, 85, 50, 2, 30), line(85, 50, 90, 50), line(90, 49, 142, 49));
-	// Electricity: buried line from the grid (right edge) up into the data center floor.
-	const POWER = path(line(159, 84, 116, 84), line(116, 83, 116, 71));
-	// Cooling water: tank -> pipe -> the nearest rooftop cooler.
-	const WATER = path(line(149, 40, 138, 40));
-	const WIRE_SPAN = sag(70, 41, 85, 50, 2, 30);
-
-	const GEOMETRY = Object.freeze({
-		GROUND_Y,
-		racks: RACK_X,
-		units: UNIT_Y,
-		coolers: COOLERS,
-		coolerY: 37,
-		link: LINK,
-		power: POWER,
-		water: WATER,
-		router: Object.freeze({ x: 41, y: 50 }),
-		lamp: Object.freeze({ x: 87, y: 53 }),
-		screen: SCREEN,
-		screenSpans: screenSpans(),
-		developer: DEVELOPER,
-		// The bird's spot on the wire between the pole and the data center.
-		perch: Object.freeze(WIRE_SPAN.find(p => p[0] === 77)),
-		shoulders: Object.freeze([{ x: 26, y: 62 }, { x: 37, y: 62 }]),
-	});
-
-	// --- Primitives ---------------------------------------------------------------------------------
-
-	function rect(ctx, color, x, y, w, h) {
-		ctx.fillStyle = color;
-		ctx.fillRect(x, y, w, h);
-	}
-
-	// Deterministic 0..999 noise for texture placement.
-	function hash(x, y) {
-		let h = Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263);
-		h = Math.imul(h ^ (h >>> 13), 1274126177);
-		return ((h ^ (h >>> 16)) >>> 0) % 1000;
-	}
-
-	// Character-map sprite: legend maps characters to palette keys, ' ' is transparent.
-	function sprite(ctx, pal, legend, rows, x, y, mirror) {
-		for (let r = 0; r < rows.length; r++) {
-			const row = mirror ? [...rows[r]].reverse().join('') : rows[r];
-			let c = 0;
-			while (c < row.length) {
-				const ch = row[c];
-				let end = c + 1;
-				while (end < row.length && row[end] === ch) {
-					end++;
-				}
-				if (ch !== ' ') {
-					rect(ctx, pal[legend[ch]], x + c, y + r, end - c, 1);
-				}
-				c = end;
-			}
-		}
-	}
-
-	// Draws a row of per-pixel colours (null = skip) as merged runs.
-	function runs(ctx, y, x0, colors) {
-		let c = 0;
-		while (c < colors.length) {
-			const color = colors[c];
-			let end = c + 1;
-			while (end < colors.length && colors[end] === color) {
-				end++;
-			}
-			if (color) {
-				rect(ctx, color, x0 + c, y, end - c, 1);
-			}
-			c = end;
-		}
-	}
-
-	// 4x4 ordered (Bayer) dither: level 0..16 of a colour over whatever is below.
-	const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
-
-	function bayerRow(ctx, color, x0, x1, y, level, skip) {
-		ctx.fillStyle = color;
-		for (let x = x0; x < x1; x++) {
-			if (BAYER[y & 3][x & 3] < level && !(skip && skip(x, y))) {
-				ctx.fillRect(x, y, 1, 1);
-			}
-		}
-	}
-
-	// Ordered dither: one colour every `step` pixels along a row.
-	function ditherRow(ctx, color, x0, x1, y, step, offset) {
-		ctx.fillStyle = color;
-		for (let x = x0 + offset; x < x1; x += step) {
-			ctx.fillRect(x, y, 1, 1);
-		}
-	}
-
-	// Shaded round foliage/cloud lobe: light from the upper left.
-	function lobe(ctx, cx, cy, r, dark, mid, light, deep) {
-		for (let dy = -r; dy <= r; dy++) {
-			const colors = [];
-			const half = Math.floor(Math.sqrt(r * r - dy * dy) + 0.35);
-			for (let dx = -half; dx <= half; dx++) {
-				const d = dx + dy * 1.4;
-				let color = mid;
-				if (d < -r * 0.9 && (dx + dy) % 2 === 0) {
-					color = light;
-				} else if (d < -r * 1.25) {
-					color = light;
-				} else if (d > r * 1.1) {
-					color = deep || dark;
-				} else if (d > r * 0.45) {
-					color = dark;
-				}
-				colors.push(color);
-			}
-			runs(ctx, cy + dy, cx - half, colors);
-		}
-	}
-
-	// --- Backdrop -----------------------------------------------------------------------------------
-
-	const SKY_EDGES = [12, 23, 32, 40];
-
-	function drawSky(ctx, pal) {
-		let top = 0;
-		for (let i = 0; i < 5; i++) {
-			const bottom = i < 4 ? SKY_EDGES[i] : 66;
-			rect(ctx, pal[`sky${i}`], 0, top, WIDTH, bottom - top);
-			top = bottom;
-		}
-		// Four-row Bayer ramp across each band edge.
-		SKY_EDGES.forEach((edge, i) => {
-			bayerRow(ctx, pal[`sky${i + 1}`], 0, WIDTH, edge - 2, 2);
-			bayerRow(ctx, pal[`sky${i + 1}`], 0, WIDTH, edge - 1, 6);
-			bayerRow(ctx, pal[`sky${i}`], 0, WIDTH, edge, 6);
-			bayerRow(ctx, pal[`sky${i}`], 0, WIDTH, edge + 1, 2);
-		});
-	}
-
-	function disc(ctx, color, cx, cy, widths) {
-		ctx.fillStyle = color;
-		widths.forEach((w, i) => ctx.fillRect(cx - Math.floor(w / 2), cy + i, w, 1));
-	}
-
-	const STARS = [[6, 5], [19, 13], [31, 3], [44, 9], [57, 2], [63, 17], [79, 6], [91, 13], [101, 3], [124, 20], [135, 4], [143, 15], [154, 7], [12, 24], [52, 27], [86, 22], [148, 27], [27, 18], [71, 26], [108, 25]];
-
-	function drawCelestial(ctx, pal, phase) {
-		if (phase === 'night') {
-			STARS.forEach(([x, y], i) => rect(ctx, i % 3 === 0 ? pal.star : pal.starDim, x, y, 1, 1));
-			for (const [x, y] of [[38, 6], [128, 12]]) {
-				rect(ctx, pal.starDim, x - 1, y, 3, 1);
-				rect(ctx, pal.starDim, x, y - 1, 1, 3);
-				rect(ctx, pal.star, x, y, 1, 1);
-			}
-			// Full moon with a soft dithered halo.
-			const mx = 114;
-			const my = 6;
-			for (let dy = -2; dy <= 10; dy++) {
-				for (let dx = -6; dx <= 6; dx++) {
-					const d = dx * dx + (dy - 4) * (dy - 4);
-					if (d > 16 && d <= 34 && (dx + dy) % 2 === 0) {
-						rect(ctx, pal.sky2, mx + dx, my + dy, 1, 1);
-					}
-				}
-			}
-			disc(ctx, pal.moon, mx, my + 1, [3, 5, 7, 7, 7, 5, 3]);
-			rect(ctx, pal.moonShade, mx + 2, my + 3, 1, 3);
-			rect(ctx, pal.moonShade, mx + 1, my + 6, 2, 1);
-			rect(ctx, pal.moonShade, mx - 2, my + 3, 2, 1);
-			rect(ctx, pal.moonShade, mx - 1, my + 5, 1, 1);
-			return;
-		}
-		if (phase === 'dawn') {
-			for (const [x, y] of [[22, 4], [97, 7], [141, 3]]) {
-				rect(ctx, pal.starDim, x, y, 1, 1);
-			}
-		}
-		const low = phase !== 'day';
-		const cx = phase === 'dawn' ? 60 : phase === 'dusk' ? 80 : 70;
-		const cy = low ? 30 : 7;
-		for (let dy = -3; dy <= 9; dy++) {
-			for (let dx = -6; dx <= 6; dx++) {
-				const d = dx * dx + (dy - 3) * (dy - 3);
-				if (d > 14 && d <= 36 && (dx + dy) % 2 === 0) {
-					rect(ctx, low ? pal.sky4 : pal.sky3, cx + dx, cy + dy, 1, 1);
-				}
-			}
-		}
-		disc(ctx, pal.sun, cx, cy, [3, 5, 7, 7, 7, 5, 3]);
-		disc(ctx, pal.sunCore, cx - 1, cy + 1, [2, 3, 2]);
-	}
-
-	// Alternating peaks and valleys; odd entries are peaks.
-	const RIDGE = [[0, 45], [11, 37], [21, 42], [33, 32], [46, 41], [58, 34], [67, 40], [78, 30], [91, 41], [103, 33], [115, 40], [128, 29], [141, 38], [152, 33], [160, 41]];
-
-	function ridgeTop(x) {
-		for (let i = 0; i < RIDGE.length - 1; i++) {
-			const [x0, y0] = RIDGE[i];
-			const [x1, y1] = RIDGE[i + 1];
-			if (x >= x0 && x <= x1) {
-				return Math.round(y0 + ((y1 - y0) * (x - x0)) / (x1 - x0));
-			}
-		}
-		return 45;
-	}
-
-	function drawMountains(ctx, pal) {
-		for (let x = 0; x < WIDTH; x++) {
-			const top = ridgeTop(x);
-			const k = RIDGE.findIndex((p, i) => i % 2 === 1 && x >= RIDGE[i - 1][0] && x <= RIDGE[i + 1][0]);
-			const [px, py] = RIDGE[k];
-			const colors = [];
-			for (let y = top; y < 58; y++) {
-				// Shadow side: right of a ridge line that leans out from each summit.
-				const shaded = x > px + Math.floor((y - py) * 0.55) - (hash(x, y) % 7 === 0 ? 1 : 0);
-				const snowLine = py + 4 + (hash(x, 3) % 3);
-				const snowy = py <= 34 && y < snowLine && y - top < 4;
-				colors.push(snowy ? (shaded ? pal.snowShade : pal.snow) : shaded ? pal.mtnShade : pal.mtn);
-			}
-			// Vertical run-merge for this column.
-			let c = 0;
-			while (c < colors.length) {
-				let end = c + 1;
-				while (end < colors.length && colors[end] === colors[c]) {
-					end++;
-				}
-				rect(ctx, colors[c], x, top + c, 1, end - c);
-				c = end;
-			}
-		}
-		// Atmospheric veil at the foot of the range.
-		for (let y = 46; y < 54; y++) {
-			bayerRow(ctx, pal.sky4, 0, WIDTH, y, y - 45);
-		}
-	}
-
-	function hillTop(x) {
-		return 52 + Math.round(2.2 * Math.sin(x * 0.065 + 0.6) + 1.4 * Math.sin(x * 0.17 + 2.1));
-	}
-
-	function drawHills(ctx, pal) {
-		for (let x = 0; x < WIDTH; x++) {
-			const top = hillTop(x);
-			rect(ctx, pal.hillLight, x, top, 1, 1);
-			rect(ctx, pal.hill, x, top + 1, 1, 66 - top);
-			if (hillTop(x + 1) > top || x % 3 === 0) {
-				rect(ctx, pal.hillShade, x, top + 3 + (x % 2), 1, 1);
-			}
-		}
-		ditherRow(ctx, pal.hillShade, 0, WIDTH, 58, 2, 0);
-	}
-
-	function drawTreeline(ctx, pal) {
-		rect(ctx, pal.pine, 0, 63, WIDTH, 4);
-		for (let i = 0; i < 24; i++) {
-			const cx = i * 7 + (hash(i, 1) % 3);
-			const top = 58 + (hash(i, 2) % 3);
-			const widths = [1, 3, 3, 5, 5, 7];
-			widths.forEach((w, r) => {
-				rect(ctx, pal.pine, cx - Math.floor(w / 2), top + r, w, 1);
-				rect(ctx, pal.pineLight, cx - Math.floor(w / 2), top + r, 1, 1);
-				rect(ctx, pal.pineDark, cx + Math.floor(w / 2), top + r, 1, 1);
-			});
-		}
-		ditherRow(ctx, pal.pineDark, 0, WIDTH, 66, 2, 1);
-	}
-
-	function drawMeadow(ctx, pal) {
-		rect(ctx, pal.meadow, 0, 67, WIDTH, GROUND_Y - 67);
-		ditherRow(ctx, pal.pineDark, 0, WIDTH, 67, 4, 0);
-		ditherRow(ctx, pal.meadowLight, 0, WIDTH, 70, 4, 2);
-		ditherRow(ctx, pal.meadowLight, 0, WIDTH, 72, 2, 1);
-		rect(ctx, pal.meadowLight, 0, 73, WIDTH, GROUND_Y - 73);
-		for (let x = 0; x < WIDTH; x += 3) {
-			const h = hash(x, 70);
-			if (h < 260) {
-				rect(ctx, pal.meadow, x, 69 + (h % 4), 2, 1);
-			}
-		}
-	}
-
-	function drawGround(ctx, pal) {
-		rect(ctx, pal.grass, 0, GROUND_Y, WIDTH, 1);
-		rect(ctx, pal.grassMid, 0, GROUND_Y + 1, WIDTH, 1);
-		rect(ctx, pal.grassDark, 0, GROUND_Y + 2, WIDTH, 1);
-		rect(ctx, pal.soil, 0, GROUND_Y + 3, WIDTH, HEIGHT - GROUND_Y - 3);
-		ditherRow(ctx, pal.grassDark, 0, WIDTH, GROUND_Y + 3, 2, 0);
-		ditherRow(ctx, pal.grassDark, 0, WIDTH, GROUND_Y + 4, 4, 1);
-		ditherRow(ctx, pal.soilDark, 0, WIDTH, HEIGHT - 1, 2, 1);
-		// Buried stones, lit from above.
-		for (let i = 0; i < 26; i++) {
-			const x = (i * 37 + (hash(i, 9) % 11)) % (WIDTH - 4);
-			const y = 81 + (hash(i, 5) % 7);
-			if (y >= 83 && y <= 85 && x > 112) {
-				continue;
-			}
-			const w = 2 + (hash(i, 7) % 3);
-			rect(ctx, pal.soilDark, x, y + 1, w, 1);
-			rect(ctx, pal.pebble, x, y, w, 1);
-			rect(ctx, pal.pebbleLight, x, y, 1, 1);
-		}
-		// Power conduit: casing and dark core; effects.js runs current through the core.
-		rect(ctx, pal.conduit, 117, 83, WIDTH - 117, 3);
-		rect(ctx, pal.conduit, 115, 71, 3, 15);
-		for (const [x, y] of POWER) {
-			rect(ctx, pal.conduitCore, x, y, 1, 1);
-		}
-		for (let x = 121; x < WIDTH; x += 9) {
-			rect(ctx, pal.metal, x, 83, 1, 3);
-		}
-	}
-
-	function drawGrassTufts(ctx, pal) {
-		for (let x = 1; x < WIDTH - 1; x++) {
-			const h = hash(x, GROUND_Y);
-			if (h < 180) {
-				rect(ctx, pal.grass, x, GROUND_Y - 1, 1, 1);
-				if (h < 50) {
-					rect(ctx, pal.grassMid, x + 1, GROUND_Y - 2, 1, 2);
-				}
-			} else if (h < 200 && (x < 50 || (x > 52 && x < 84))) {
-				rect(ctx, h % 2 ? pal.petal : pal.petalWarm, x, GROUND_Y - 2, 1, 1);
-				rect(ctx, pal.grassDark, x, GROUND_Y - 1, 1, 1);
-			}
-		}
-	}
-
-	// --- Midground ----------------------------------------------------------------------------------
-
-	function drawTree(ctx, pal, cx, base) {
-		rect(ctx, pal.trunk, cx - 1, base - 10, 3, 10);
-		rect(ctx, pal.trunkDark, cx + 1, base - 10, 1, 10);
-		rect(ctx, pal.leafDeep, cx - 3, base, 7, 1);
-		lobe(ctx, cx + 3, base - 13, 4, pal.leafDark, pal.leaf, pal.leafLight, pal.leafDeep);
-		lobe(ctx, cx - 3, base - 13, 4, pal.leafDark, pal.leaf, pal.leafLight, pal.leafDeep);
-		lobe(ctx, cx, base - 17, 5, pal.leafDark, pal.leaf, pal.leafLight, pal.leafDeep);
-	}
-
-	function drawBush(ctx, pal, cx, base) {
-		lobe(ctx, cx + 3, base - 2, 2, pal.leafDark, pal.leaf, pal.leafLight, pal.leafDeep);
-		lobe(ctx, cx, base - 3, 3, pal.leafDark, pal.leaf, pal.leafLight, pal.leafDeep);
-	}
-
-	function drawPole(ctx, pal) {
-		rect(ctx, pal.pole, 66, 40, 2, GROUND_Y - 40);
-		rect(ctx, pal.poleLight, 66, 40, 1, GROUND_Y - 40);
-		rect(ctx, pal.logDeep, 65, GROUND_Y - 1, 4, 1);
-		rect(ctx, pal.pole, 61, 42, 12, 1);
-		rect(ctx, pal.logDeep, 61, 43, 12, 1);
-		rect(ctx, pal.logDeep, 64, 44, 1, 1);
-		rect(ctx, pal.logDeep, 69, 44, 1, 1);
-		for (const x of [63, 70]) {
-			rect(ctx, pal.insulator, x, 41, 1, 1);
-		}
-	}
-
-	function drawWire(ctx, pal) {
-		for (const [x, y] of LINK) {
-			if (x >= 50 && x <= 85) {
-				rect(ctx, pal.cable, x, y, 1, 1);
-			}
-		}
-		for (const x of [63, 70]) {
-			rect(ctx, pal.insulator, x, 42, 1, 1);
-		}
-	}
-
-	// --- The house: a cut-away room ------------------------------------------------------------------
-
-	function drawHouse(ctx, pal) {
-		// Roof: shingle courses on a trapezoid, ridge cap, deep eave shadow.
-		for (let y = 31; y <= 45; y++) {
-			const left = 14 - (y - 31);
-			const right = 37 + (y - 31);
-			const course = (y - 31) % 3;
-			rect(ctx, course === 2 ? pal.roofDark : pal.roof, left, y, right - left + 1, 1);
-			if (course !== 2) {
-				const shift = Math.floor((y - 31) / 3) % 2 ? 2 : 0;
-				for (let x = left + 2 + shift; x < right - 1; x += 5) {
-					rect(ctx, pal.roofDark, x, y, 1, 1);
-				}
-				if (course === 0) {
-					for (let x = left + 3 + shift; x < right - 1; x += 5) {
-						rect(ctx, pal.roofLight, x, y, 2, 1);
-					}
-				}
-			}
-			rect(ctx, pal.roofLight, left, y, 1, 1);
-			rect(ctx, pal.roofDark, right, y, 1, 1);
-		}
-		rect(ctx, pal.roofDark, 14, 30, 24, 1);
-		rect(ctx, pal.roofLight, 15, 30, 20, 1);
-		rect(ctx, pal.logDeep, 0, 45, 52, 1);
-
-		// Posts and beam (outside, so tinted with the hour).
-		rect(ctx, pal.logDark, 2, 46, 48, 2);
-		rect(ctx, pal.log, 2, 46, 48, 1);
-		for (const x of [2, 47]) {
-			rect(ctx, pal.log, x, 46, 3, 26);
-			rect(ctx, pal.logLight, x, 48, 1, 24);
-			rect(ctx, pal.logDark, x + 2, 48, 1, 24);
-		}
-
-		// Interior: plank wall, wainscot, floor boards.
-		rect(ctx, pal.wall, 5, 48, 42, 22);
-		rect(ctx, pal.wallShade, 5, 48, 42, 1);
-		ditherRow(ctx, pal.wallShade, 5, 47, 49, 2, 0);
-		for (let x = 10; x < 47; x += 7) {
-			rect(ctx, pal.wallShade, x, 50, 1, 14);
-		}
-		rect(ctx, pal.trim, 5, 64, 42, 1);
-		rect(ctx, pal.wainscot, 5, 65, 42, 5);
-		for (let x = 7; x < 47; x += 4) {
-			rect(ctx, pal.trim, x, 66, 1, 4);
-		}
-		rect(ctx, pal.floor, 5, 70, 42, 2);
-		for (let x = 6; x < 47; x += 6) {
-			rect(ctx, pal.floorDark, x, 71, 3, 1);
-		}
-
-		// Window onto the same sky as outside.
-		rect(ctx, pal.trim, 7, 51, 11, 10);
-		rect(ctx, pal.glass, 8, 52, 9, 8);
-		rect(ctx, pal.glassLight, 8, 52, 4, 1);
-		rect(ctx, pal.glassLight, 8, 53, 1, 3);
-		rect(ctx, pal.trim, 12, 52, 1, 8);
-		rect(ctx, pal.trim, 8, 55, 9, 1);
-		rect(ctx, pal.deskTop, 6, 61, 13, 1);
-		rect(ctx, pal.wallShade, 7, 62, 11, 1);
-
-		// Desk.
-		rect(ctx, pal.deskTop, 19, 63, 26, 1);
-		rect(ctx, pal.desk, 19, 64, 26, 2);
-		rect(ctx, pal.deskDark, 19, 66, 26, 1);
-		rect(ctx, pal.deskDark, 20, 67, 2, 3);
-		rect(ctx, pal.deskDark, 42, 67, 2, 3);
-
-		// Monitor with a resting screen of code.
-		rect(ctx, pal.bezel, 24, 49, 16, 12);
-		rect(ctx, pal.screen, SCREEN.x, SCREEN.y, SCREEN.w, SCREEN.h);
-		rect(ctx, pal.screenGlow, SCREEN.x, SCREEN.y, SCREEN.w, 1);
-		rect(ctx, pal.bezel, 31, 61, 2, 2);
-		rect(ctx, pal.bezel, 29, 62, 6, 1);
-		const code = [[51, 26, 5, 'codeA'], [51, 32, 3, 'codeC'], [53, 28, 7, 'codeB'], [55, 28, 4, 'codeA'], [55, 33, 4, 'codeC'], [57, 26, 2, 'codeB'], [57, 36, 2, 'codeA'], [59, 26, 1, 'codeC']];
-		for (const [y, x, w, key] of code) {
-			rect(ctx, pal[key], x, y, w, 1);
-		}
-
-		// Router on the wall: where the data leaves the room.
-		rect(ctx, pal.router, 41, 50, 4, 2);
-		rect(ctx, pal.routerDark, 41, 51, 4, 1);
-		rect(ctx, pal.router, 44, 48, 1, 2);
-		rect(ctx, pal.cable, 40, 54, 1, 1);
-		rect(ctx, pal.cable, 40, 52, 1, 2);
-		rect(ctx, pal.cable, 45, 50, 2, 1);
-
-		// Plant and mug.
-		rect(ctx, pal.pot, 20, 60, 4, 3);
-		rect(ctx, pal.potDark, 20, 62, 4, 1);
-		rect(ctx, pal.plantDark, 19, 57, 2, 3);
-		rect(ctx, pal.plant, 21, 56, 2, 4);
-		rect(ctx, pal.plantDark, 23, 58, 1, 2);
-		rect(ctx, pal.plant, 18, 58, 1, 1);
-		rect(ctx, pal.mug, 41, 60, 3, 3);
-		rect(ctx, pal.mugShade, 43, 60, 1, 3);
-		rect(ctx, pal.mug, 44, 61, 1, 1);
-
-		sprite(ctx, pal, DEVELOPER.legend, DEVELOPER.rows, DEVELOPER.x, DEVELOPER.y);
-
-		// Stone footing.
-		rect(ctx, pal.stoneDark, 1, 72, 50, 4);
-		for (let row = 0; row < 2; row++) {
-			for (let x = 1 + row * 3; x < 50; x += 6) {
-				rect(ctx, pal.stone, x, 72 + row * 2, Math.min(5, 51 - x), 1);
-				rect(ctx, pal.stoneLight, x, 72 + row * 2, 1, 1);
-			}
-		}
-	}
-
-	// --- The data center: a cut-away hall --------------------------------------------------------------
-
-	function drawCooler(ctx, pal, x) {
-		const y = 37;
-		rect(ctx, pal.concrete, x, y, 13, 7);
-		rect(ctx, pal.concreteLight, x, y, 13, 1);
-		rect(ctx, pal.concreteDark, x, y + 6, 13, 1);
-		rect(ctx, pal.concreteShade, x + 12, y + 1, 1, 5);
-		for (const sx of [x + 1, x + 10]) {
-			rect(ctx, pal.concreteDark, sx, y + 2, 2, 1);
-			rect(ctx, pal.concreteDark, sx, y + 4, 2, 1);
-		}
-		drawFanHousing(ctx, pal, x);
-		drawFan(ctx, pal, x, false);
-	}
-
-	function drawFanHousing(ctx, pal, x) {
-		const y = 37;
-		rect(ctx, pal.metalDark, x + 4, y + 1, 5, 1);
-		rect(ctx, pal.metalDark, x + 4, y + 5, 5, 1);
-		rect(ctx, pal.metalDark, x + 3, y + 2, 1, 3);
-		rect(ctx, pal.metalDark, x + 9, y + 2, 1, 3);
-		rect(ctx, pal.metalDeep, x + 4, y + 2, 5, 3);
-	}
-
-	// Fan blades: '+' at rest, 'x' on alternate frames while spinning.
-	function drawFan(ctx, pal, x, turned) {
-		const cx = x + 6;
-		const cy = 40;
-		if (turned) {
-			for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [-2, -1], [2, 1]]) {
-				rect(ctx, pal.metal, cx + dx, cy + dy, 1, 1);
-			}
-		} else {
-			rect(ctx, pal.metal, cx - 2, cy, 5, 1);
-			rect(ctx, pal.metal, cx, cy - 1, 1, 3);
-		}
-		rect(ctx, pal.metalLight, cx, cy, 1, 1);
-	}
-
-	function drawRack(ctx, pal, x) {
-		rect(ctx, pal.rack, x, 52, 7, 18);
-		rect(ctx, pal.rackCap, x, 52, 7, 1);
-		for (const y of UNIT_Y) {
-			rect(ctx, pal.unit, x + 1, y, 5, 1);
-			rect(ctx, pal.unitShade, x + 1, y + 1, 5, 1);
-			rect(ctx, pal.unitShade, x + 1, y, 1, 1);
-			ditherRow(ctx, pal.rack, x + 3, x + 6, y + 1, 2, 0);
-		}
-		rect(ctx, pal.unitShade, x + 1, 69, 5, 1);
-		rect(ctx, pal.ledDim, x + 1, UNIT_Y[0], 1, 1);
-	}
-
-	function drawDataCenter(ctx, pal) {
-		// Hall interior.
-		rect(ctx, pal.dcWall, 90, 47, 55, 23);
-		for (let x = 98; x < 145; x += 9) {
-			rect(ctx, pal.dcSeam, x, 50, 1, 20);
-		}
-		rect(ctx, pal.trayDark, 90, 47, 55, 1);
-		rect(ctx, pal.tray, 90, 48, 55, 1);
-		rect(ctx, pal.trayDark, 90, 49, 55, 1);
-		for (const x of RACK_X) {
-			rect(ctx, pal.trayDark, x + 3, 50, 1, 2);
-			rect(ctx, pal.ceilingLamp, x + 2, 47, 3, 1);
-		}
-		RACK_X.forEach(x => drawRack(ctx, pal, x));
-		rect(ctx, pal.tile, 90, 70, 55, 2);
-		for (let x = 92; x < 145; x += 4) {
-			rect(ctx, pal.tileSeam, x, 70, 1, 2);
-		}
-
-		// Concrete shell: posts, roof slab, footing (outside, tinted with the hour).
-		for (const x of [86, 145]) {
-			rect(ctx, pal.concrete, x, 47, 4, 25);
-			rect(ctx, pal.concreteLight, x, 47, 1, 25);
-			rect(ctx, pal.concreteShade, x + 3, 47, 1, 25);
-		}
-		rect(ctx, pal.concreteDark, 84, 44, 67, 3);
-		rect(ctx, pal.concreteLight, 84, 44, 67, 1);
-		rect(ctx, pal.concrete, 84, 45, 67, 1);
-		rect(ctx, pal.concreteDark, 85, 72, 65, 4);
-		for (let x = 85; x < 150; x += 8) {
-			rect(ctx, pal.concreteShade, x, 72, 7, 1);
-		}
-
-		// Status lamp housing and cable entry.
-		const lamp = GEOMETRY.lamp;
-		rect(ctx, pal.metalDark, lamp.x - 1, lamp.y - 1, 4, 4);
-		rect(ctx, pal.lampOff, lamp.x, lamp.y, 2, 2);
-		rect(ctx, pal.metalDark, 85, 49, 1, 3);
-		for (const [x, y] of LINK) {
-			if (x >= 86 && x <= 89) {
-				rect(ctx, pal.cable, x, y, 1, 1);
-			}
-		}
-
-		COOLERS.forEach(x => drawCooler(ctx, pal, x));
-	}
-
-	function drawTank(ctx, pal) {
-		// Legs and bracing first, then the tank body.
-		rect(ctx, pal.metalDark, 151, 55, 1, GROUND_Y - 55);
-		rect(ctx, pal.metalDark, 157, 55, 1, GROUND_Y - 55);
-		for (let i = 0; i < 6; i++) {
-			rect(ctx, pal.metal, 152 + i, 58 + i, 1, 1);
-			rect(ctx, pal.metal, 156 - i, 58 + i, 1, 1);
-			rect(ctx, pal.metal, 152 + i, 66 + i, 1, 1);
-			rect(ctx, pal.metal, 156 - i, 66 + i, 1, 1);
-		}
-		disc(ctx, pal.tankDark, 154, 34, [3, 7, 9]);
-		rect(ctx, pal.tankShade, 153, 34, 1, 1);
-		rect(ctx, pal.tankShade, 151, 35, 3, 1);
-		rect(ctx, pal.tank, 150, 37, 9, 18);
-		rect(ctx, pal.tankLight, 151, 37, 1, 18);
-		rect(ctx, pal.tankShade, 156, 37, 2, 18);
-		rect(ctx, pal.tankDark, 158, 37, 1, 18);
-		rect(ctx, pal.tankDark, 150, 43, 9, 1);
-		rect(ctx, pal.tankDark, 150, 51, 9, 1);
-		rect(ctx, pal.tankDark, 150, 54, 9, 1);
-		// Water drop emblem.
-		disc(ctx, pal.tankMark, 154, 44, [1, 1, 3, 5, 5, 3]);
-		rect(ctx, pal.tankLight, 153, 47, 1, 2);
-		// Feed pipe to the nearest cooler.
-		rect(ctx, pal.pipeLight, 138, 40, 12, 1);
-		rect(ctx, pal.pipeDark, 138, 41, 12, 1);
-		rect(ctx, pal.pipeDark, 149, 39, 1, 4);
-	}
-
-	// Everything static, in logical pixels; the caller sets the integer scale transform.
-	function drawBackground(ctx, phase) {
-		const p = PHASES.includes(phase) ? phase : 'day';
-		const pal = palette(p);
-		drawSky(ctx, pal);
-		drawCelestial(ctx, pal, p);
-		drawMountains(ctx, pal);
-		drawHills(ctx, pal);
-		drawTreeline(ctx, pal);
-		drawMeadow(ctx, pal);
-		drawGround(ctx, pal);
-		drawForeground(ctx, pal);
-		drawGrassTufts(ctx, pal);
-	}
-
-	function drawForeground(ctx, pal) {
-		drawTree(ctx, pal, 78, 73);
-		drawBush(ctx, pal, 55, 75);
-		drawHouse(ctx, pal);
-		drawDataCenter(ctx, pal);
-		drawTank(ctx, pal);
-		drawPole(ctx, pal);
-		drawWire(ctx, pal);
-	}
-
-	// Pixels covered by buildings, trees and the pole, so far-away effects (haze) stay behind them.
-	function buildOcclusion() {
-		const bits = new Uint8Array(WIDTH * HEIGHT);
-		const mask = {
-			fillStyle: '',
-			fillRect(x, y, w, h) {
-				for (let yy = Math.max(0, y); yy < Math.min(HEIGHT, y + h); yy++) {
-					for (let xx = Math.max(0, x); xx < Math.min(WIDTH, x + w); xx++) {
-						bits[yy * WIDTH + xx] = 1;
-					}
-				}
-			},
-		};
-		drawForeground(mask, PALETTES.day);
-		return bits;
-	}
-
-	const OCCLUSION = buildOcclusion();
-
-	function occluded(x, y) {
-		return x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT || OCCLUSION[y * WIDTH + x] === 1;
+		runs.flush();
 	}
 
 	window.CarbonBitScene = Object.freeze({
-		WIDTH,
-		HEIGHT,
-		PHASES,
-		P: PALETTES.day,
-		PALETTES,
-		GEOMETRY,
-		phaseOf,
-		palette,
-		rect,
-		hash,
-		bayerRow,
-		sprite,
-		lobe,
-		occluded,
-		drawBackground,
-		drawFan,
-		drawFanHousing,
+		WIDTH, HEIGHT, CX, CY, R, P, MOON, STARS, GLOBE_STEP_MS, DEFAULT_PLACE,
+		bayer, hash, createRuns, geometry, sunAt, moonPhaseAt, globeKey, drawBackground, drawGlobe,
+		// Exposed for tests: the land/ocean map and city cells.
+		MAP, COLS, ROWS, cellIndex,
 	});
 })();

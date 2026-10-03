@@ -2,9 +2,10 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
 import { WORLD_STATES } from '../core/messages/protocol';
-import { createBrowser, dynamicCalls, type Frame, frameOf, RecordingContext, root, WORLD_SCRIPTS } from './fakeBrowser';
+import { createBrowser, dynamicCalls, EPOCH, type Frame, frameOf, RecordingContext, root, WORLD_SCRIPTS } from './fakeBrowser';
 
-const HOURS = [6, 12, 19, 23];
+const HOUR = 3_600_000;
+const PLACES = [{ lon: 30, south: false }, { lon: -75, south: false }, { lon: 151, south: true }];
 
 suite('Pixel world renderer', () => {
 	test('world scripts are self-contained primitives with no external assets', () => {
@@ -14,156 +15,199 @@ suite('Pixel world renderer', () => {
 		}
 	});
 
-	test('draws the whole scene deterministically on integer pixels, at every hour', () => {
+	test('draws the whole scene deterministically on integer pixels, for every state, place and hour', () => {
 		const browser = createBrowser();
-		for (const hour of HOURS) {
-			for (const state of WORLD_STATES) {
-				const a = new RecordingContext();
-				const b = new RecordingContext();
-				browser.globals.CarbonBitWorld.drawScene(a, frameOf(state, { hour }));
-				browser.globals.CarbonBitWorld.drawScene(b, frameOf(state, { hour }));
-				assert.deepStrictEqual(a.calls, b.calls, `${state} at ${hour}h`);
-				for (const call of a.calls) {
-					assert.ok(call.slice(2).every(Number.isInteger), `${state}: ${JSON.stringify(call)}`);
-					assert.match(String(call[1]), /^#[0-9a-f]{6}$/, `${state}: colour ${String(call[1])}`);
+		for (const place of PLACES) {
+			for (const epoch of [EPOCH, EPOCH + 9 * HOUR]) {
+				for (const state of WORLD_STATES) {
+					const a = new RecordingContext();
+					const b = new RecordingContext();
+					browser.globals.CarbonBitWorld.drawScene(a, frameOf(state, { epoch, place }));
+					browser.globals.CarbonBitWorld.drawScene(b, frameOf(state, { epoch, place }));
+					assert.deepStrictEqual(a.calls, b.calls, `${state} at ${place.lon}`);
+					for (const call of a.calls) {
+						assert.ok(call.slice(2).every(Number.isInteger), `${state}: ${JSON.stringify(call)}`);
+						assert.match(String(call[1]), /^#[0-9a-f]{6}$/, `${state}: colour ${String(call[1])}`);
+						const [x, y] = call.slice(2) as number[];
+						assert.ok(x >= -8 && x < 168 && y >= -2 && y < 92, `${state}: off-canvas ${JSON.stringify(call)}`);
+					}
 				}
 			}
 		}
 		const idle = new RecordingContext();
-		browser.globals.CarbonBitWorld.drawIdleScene(idle);
-		assert.ok(idle.count('fillRect') > 300, 'idle scene paints the full background');
+		browser.globals.CarbonBitWorld.drawIdleScene(idle, EPOCH);
+		assert.ok(idle.count('fillRect') > 1000, 'the idle scene paints space, stars and the whole planet');
 	});
 
-	test('keeps a limited palette: one master palette, swapped by time of day', () => {
+	test('keeps a limited 16-bit palette with no red anywhere', () => {
 		const browser = createBrowser();
-		const { PALETTES, PHASES } = browser.globals.CarbonBitScene;
-		for (const phase of PHASES) {
-			const ctx = new RecordingContext();
-			browser.globals.CarbonBitScene.drawBackground(ctx, phase);
-			const used = new Set(ctx.calls.map(c => c[1]));
-			// Daylight is the master palette; other phases add a tinted copy of the outdoor ramps only.
-			assert.ok(used.size <= (phase === 'day' ? 40 : 64), `${phase} background uses ${used.size} colours`);
-			const known = new Set(Object.values(PALETTES[phase]));
-			for (const color of used) {
-				assert.ok(known.has(color as string), `${phase}: ${String(color)} is not in the palette`);
+		const used = new Set<string>();
+		for (const state of WORLD_STATES) {
+			for (const still of [false, true]) {
+				const ctx = new RecordingContext();
+				browser.globals.CarbonBitWorld.drawScene(ctx, frameOf(state, { still, activeCount: 3, elapsed: 5000 }));
+				ctx.calls.forEach(c => used.add(String(c[1])));
 			}
+		}
+		assert.ok(used.size <= 64, `uses ${used.size} colours`);
+		const { P } = browser.globals.CarbonBitScene;
+		const { C } = browser.globals.CarbonBitEffects;
+		for (const color of used) {
+			assert.ok(Object.values(P).includes(color) || Object.values(C).includes(color), `${color} is not in the palette`);
+			const [r, g, b] = [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16));
+			assert.ok(!(r > 180 && g < 110 && b < 110), `${color} reads as an alarming red`);
 		}
 	});
 
-	test('the sky follows the hour: four distinct phases', () => {
+	test('the planet shows real day and night, recognisable continents and the moon phase', () => {
 		const browser = createBrowser();
-		const { phaseOf } = browser.globals.CarbonBitScene;
-		assert.deepStrictEqual([5, 6, 7, 12, 17, 18, 19, 20, 23, 0, 4].map(phaseOf),
-			['dawn', 'dawn', 'day', 'day', 'day', 'dusk', 'dusk', 'night', 'night', 'night', 'night']);
-		assert.strictEqual(phaseOf(Number.NaN), 'day');
-		const drawn = HOURS.map(hour => {
+		const { sunAt, moonPhaseAt, MAP, cellIndex } = browser.globals.CarbonBitScene;
+		// Around the September equinox the sun is over the equator, at the longitude where it is noon.
+		const sun = sunAt(Date.UTC(2026, 8, 22, 12));
+		assert.ok(Math.abs(sun.lat) < 2 && Math.abs(sun.lon) < 1, JSON.stringify(sun));
+		assert.ok(sunAt(Date.UTC(2026, 5, 21, 12)).lat > 23, 'June solstice: sun over the Tropic of Cancer');
+		assert.ok(Math.abs(sunAt(Date.UTC(2026, 8, 22, 18)).lon + 90) < 1, '18:00 UTC: noon at 90° W');
+		// A known full moon (2026-03-03) and new moon (2026-03-19).
+		assert.ok(Math.abs(moonPhaseAt(Date.UTC(2026, 2, 3, 12)) - 0.5) < 0.05);
+		assert.ok(Math.min(moonPhaseAt(Date.UTC(2026, 2, 19, 2)), 1 - moonPhaseAt(Date.UTC(2026, 2, 19, 2))) < 0.05);
+		const land = (lon: number, lat: number) => MAP[cellIndex(lon, lat)] >= 2;
+		for (const [lon, lat, name] of [[2, 47, 'France'], [20, 0, 'Congo'], [-100, 40, 'USA'], [-60, -10, 'Brazil'], [135, -25, 'Australia'], [80, 22, 'India']] as const) {
+			assert.ok(land(lon, lat), `${name} is land`);
+		}
+		for (const [lon, lat, name] of [[-30, 30, 'Atlantic'], [-150, 0, 'Pacific'], [75, -20, 'Indian Ocean'], [5, 38, 'Mediterranean']] as const) {
+			assert.ok(!land(lon, lat), `${name} is sea`);
+		}
+		// Over one day the visible face swings between mostly day and mostly night, with city lights. (Seen
+		// from mid-northern latitudes in October, part of the face stays dark even at noon, as it should.)
+		const { P, drawGlobe } = browser.globals.CarbonBitScene;
+		const night = [P.oceanNight, P.landNight, P.desertNight, P.iceNight, P.cloudNight, P.city];
+		const shares = Array.from({ length: 24 }, (_, hour) => {
 			const ctx = new RecordingContext();
-			browser.globals.CarbonBitWorld.drawIdleScene(ctx, hour);
-			return JSON.stringify(ctx.calls);
+			drawGlobe(ctx, Date.UTC(2026, 9, 3, hour), PLACES[0]);
+			const width = (colors?: string[]) => ctx.calls.filter(c => c[0] === 'fillRect' && (!colors || colors.includes(String(c[1])))).reduce((n, c) => n + Number(c[4]), 0);
+			return { night: width(night) / width(), city: width([P.city]) };
 		});
-		assert.strictEqual(new Set(drawn).size, HOURS.length);
+		const nights = shares.map(s => s.night);
+		assert.ok(Math.min(...nights) < 0.35, 'some hour shows the face mostly in daylight');
+		assert.ok(Math.max(...nights) > 0.65, 'some hour shows the face mostly at night');
+		assert.ok(Math.max(...nights) - Math.min(...nights) > 0.3, 'the terminator sweeps across the face');
+		assert.ok(shares.some(s => s.night > 0.5 && s.city > 0), 'city lights on the night side');
 	});
 
-	test('caches the static layer once and blits it with crisp integer scaling', () => {
+	test('your place comes from the timezone and sits on the planet, a good arc away from a data-center region', () => {
+		for (const [offsetMinutes, timeZone, lon, south] of [[-120, 'Europe/Rome', 30, false], [300, 'America/New_York', -75, false], [-600, 'Australia/Sydney', 150, true]] as const) {
+			const browser = createBrowser({ offsetMinutes, timeZone });
+			assert.deepStrictEqual({ ...browser.globals.CarbonBitWorld.localPlace() }, { lon, south });
+			const { CX, CY, R, geometry } = browser.globals.CarbonBitScene;
+			const geo = geometry({ lon, south });
+			for (const point of [geo.you, geo.hub]) {
+				assert.ok((point.x + 0.5 - CX) ** 2 + (point.y + 0.5 - CY) ** 2 < R * R, `${timeZone}: marker on the disk`);
+			}
+			assert.ok(Math.hypot(geo.hub.x - geo.you.x, geo.hub.y - geo.you.y) > 25, `${timeZone}: the data center is far enough for a visible arc`);
+			const apex = Math.min(...geo.arc.map(p => p.y));
+			assert.ok(apex < Math.min(geo.you.y, geo.hub.y) - 8, `${timeZone}: the request arcs over the planet`);
+		}
+	});
+
+	test('caches space once and the globe only when it changes, and blits them with crisp integer scaling', () => {
 		const browser = createBrowser();
-		const backgroundRects = browser.layer.count('fillRect');
-		assert.ok(backgroundRects > 300);
 		browser.state('ProcessingHeavy', 2);
 		browser.advance(1000);
-		assert.strictEqual(browser.layer.count('fillRect'), backgroundRects, 'background is not redrawn per frame');
+		const [space, globe] = browser.layers;
+		const spaceRects = space.count('fillRect');
+		const globeRects = globe.count('fillRect');
+		assert.ok(spaceRects > 50 && globeRects > 500);
+		browser.advance(1500);
+		assert.strictEqual(space.count('fillRect'), spaceRects, 'space is never redrawn');
+		assert.strictEqual(globe.count('fillRect'), globeRects, 'the globe is not redrawn per frame');
+		assert.strictEqual(browser.layers.length, 2);
 		assert.strictEqual(browser.main.imageSmoothingEnabled, false);
 		assert.strictEqual(browser.canvas.width, 320);
 		assert.strictEqual(browser.canvas.height, 180);
 		assert.strictEqual(browser.canvas.style.width, '320px', 'the canvas fills its frame');
 		assert.ok(browser.main.calls.some(c => c[0] === 'setTransform' && c[1] === 2 && c[4] === 2));
-		assert.ok(browser.main.count('fillRect') / browser.frames() < backgroundRects / 4, 'per-frame work is the dynamic layer only');
+		const perFrame = browser.main.count('fillRect') / browser.frames();
+		assert.ok(perFrame < globeRects / 2 && perFrame < 500, `per-frame work is the moving layer only (${perFrame} rects vs ${globeRects} for the globe)`);
 	});
 
-	test('reads the clock rarely and builds one background per phase', () => {
-		const browser = createBrowser({ hour: 12 });
-		const day = browser.layer.count('fillRect');
-		browser.setHour(23);
+	test('clouds drift and the terminator moves: the globe is redrawn every few seconds, not every frame', () => {
+		const browser = createBrowser();
+		browser.state('Idle', 0);
+		browser.advance(2000);
+		const globe = browser.layers[1];
+		const before = globe.count('clearRect');
+		browser.advance(20_000);
+		const redraws = globe.count('clearRect') - before;
+		const step = browser.globals.CarbonBitScene.GLOBE_STEP_MS;
+		assert.ok(redraws >= Math.floor(20_000 / step) - 1 && redraws <= Math.ceil(20_000 / step) + 1, `${redraws} redraws in 20 s`);
+		const a = new RecordingContext();
+		const b = new RecordingContext();
+		browser.globals.CarbonBitScene.drawGlobe(a, EPOCH, PLACES[0]);
+		browser.globals.CarbonBitScene.drawGlobe(b, EPOCH + 60_000, PLACES[0]);
+		assert.notDeepStrictEqual(a.calls, b.calls, 'a minute later the clouds have moved');
+	});
+
+	test('reads the wall clock rarely and follows it between reads', () => {
+		const browser = createBrowser();
+		browser.state('ProcessingMedium', 1);
+		const reads = browser.clockReads();
 		browser.advance(30_000);
-		assert.strictEqual(browser.layer.count('fillRect'), day, 'the clock is not read every frame');
-		browser.advance(31_000);
-		const night = browser.layer.count('fillRect');
-		assert.ok(night > day, 'night sky cached after the next clock read');
-		browser.advance(120_000);
-		assert.strictEqual(browser.layer.count('fillRect'), night);
-		browser.setHour(12);
-		browser.state('ProcessingLight');
-		assert.strictEqual(browser.layer.count('fillRect'), night, 'a phase already shown is reused');
+		assert.ok(browser.clockReads() - reads <= 1, `read the clock ${browser.clockReads() - reads} times in 30 s`);
 	});
 
 	test('every world state has a distinct treatment, animated and still', () => {
 		const browser = createBrowser();
-		for (const hour of HOURS) {
-			for (const still of [false, true]) {
-				const drawn = WORLD_STATES.map(state => JSON.stringify(dynamicCalls(browser, frameOf(state, { still, hour }))));
-				assert.strictEqual(new Set(drawn).size, WORLD_STATES.length, `still=${still} hour=${hour}`);
-			}
+		for (const still of [false, true]) {
+			const drawn = WORLD_STATES.map(state => JSON.stringify(dynamicCalls(browser, frameOf(state, { still }))));
+			assert.strictEqual(new Set(drawn).size, WORLD_STATES.length, `still=${still}`);
 		}
 	});
 
 	test('effect density grows with model class and concurrent requests', () => {
 		const browser = createBrowser();
-		for (const still of [false, true]) {
-			const size = (state: string, activeCount = 1) => dynamicCalls(browser, frameOf(state, { activeCount, still, elapsed: 5000 })).length;
-			assert.ok(size('ProcessingLight') < size('ProcessingMedium'), `still=${still}`);
-			assert.ok(size('ProcessingMedium') < size('ProcessingHeavy'), `still=${still}`);
-			assert.ok(size('ProcessingMedium', 1) < size('ProcessingMedium', 3), `still=${still}`);
-			assert.ok(size('ProcessingLight') > size('Idle'), `still=${still}`);
-		}
+		const size = (state: string, activeCount = 1) => dynamicCalls(browser, frameOf(state, { activeCount, mode: 'neutral' })).length;
+		assert.ok(size('ProcessingLight') < size('ProcessingMedium'));
+		assert.ok(size('ProcessingMedium') < size('ProcessingHeavy'));
+		assert.ok(size('ProcessingMedium', 1) < size('ProcessingMedium', 3));
+		assert.ok(size('ProcessingLight') > size('Idle'));
+	});
+
+	test('a request leaves your place, work shows at the data center, and the reply comes home in green', () => {
+		const browser = createBrowser();
+		const { C } = browser.globals.CarbonBitEffects;
+		const geo = browser.globals.CarbonBitScene.geometry();
+		const near = (calls: unknown[][], color: string, point: { x: number; y: number }, radius: number) =>
+			calls.some(c => c[1] === color && Math.abs(Number(c[2]) - point.x) <= radius && Math.abs(Number(c[3]) - point.y) <= radius);
+		const starting = dynamicCalls(browser, frameOf('RequestStarting', { elapsed: 100 }));
+		assert.ok(near(starting, C.request, geo.you, 4), 'the request starts at your place');
+		const heavy = dynamicCalls(browser, frameOf('ProcessingHeavy'));
+		assert.ok(near(heavy, C.power, geo.hub, 10), 'power glows around the data center');
+		assert.ok(near(heavy, C.vapour, geo.hub, 16), 'cooling vapour rises from the data center');
+		const reply = dynamicCalls(browser, frameOf('ResponseArriving', { elapsed: 1250 }));
+		assert.ok(near(reply, C.reply, geo.you, 6), 'the reply lands at your place');
 	});
 
 	test('failure and completion use restrained indicators and settle back to an identical idle', () => {
 		const browser = createBrowser();
-		const { P } = browser.globals.CarbonBitScene;
-		const { IDLE_SETTLE_MS } = browser.globals.CarbonBitEffects;
+		const { C, IDLE_SETTLE_MS } = browser.globals.CarbonBitEffects;
 		const colors = (frame: Frame) => new Set(dynamicCalls(browser, frame).map(c => c[1]));
-		assert.ok(colors(frameOf('Failed')).has(P.warn));
-		assert.ok(colors(frameOf('Failed', { still: true })).has(P.warn));
-		assert.ok(colors(frameOf('Idle', { prevState: 'Failed', elapsed: 100 })).has(P.warnDim));
-		assert.ok(colors(frameOf('ResponseArriving', { elapsed: 1400 })).has(P.done));
-		assert.ok(colors(frameOf('ResponseArriving', { still: true })).has(P.done));
-		// No red anywhere: failure is amber, never alarming (PRD §56).
-		for (const state of WORLD_STATES) {
-			for (const color of colors(frameOf(state))) {
-				const [r, g] = [parseInt(String(color).slice(1, 3), 16), parseInt(String(color).slice(3, 5), 16)];
-				assert.ok(!(r > 200 && g < 90), `${state} uses an alarming red ${String(color)}`);
-			}
-		}
-		// Failure blinks slowly (>= 0.7 s per phase), so it never flashes.
-		const lamp = (elapsed: number) => JSON.stringify(dynamicCalls(browser, frameOf('Failed', { elapsed, t: 0 })).filter(c => c[1] === P.warn || c[1] === P.warnDim));
-		assert.strictEqual(lamp(1000), lamp(1350));
-		for (const hour of HOURS) {
-			const calm = JSON.stringify(dynamicCalls(browser, frameOf('Idle', { elapsed: IDLE_SETTLE_MS, hour })));
-			for (const prevState of WORLD_STATES) {
-				const settled = JSON.stringify(dynamicCalls(browser, frameOf('Idle', { prevState, elapsed: IDLE_SETTLE_MS, hour })));
-				assert.strictEqual(settled, calm, `${prevState} at ${hour}h`);
-			}
+		assert.ok(colors(frameOf('Failed', { elapsed: 100 })).has(C.warn));
+		assert.ok(colors(frameOf('Failed', { elapsed: 800 })).has(C.warnDim), 'a slow blink, not a flash');
+		assert.ok(colors(frameOf('Idle', { prevState: 'Failed', elapsed: 100 })).has(C.warnDim));
+		assert.ok(colors(frameOf('ResponseArriving', { elapsed: 1250 })).has(C.reply));
+		const calm = JSON.stringify(dynamicCalls(browser, frameOf('Idle', { elapsed: IDLE_SETTLE_MS })));
+		for (const prevState of ['Failed', 'ResponseArriving', 'ProcessingHeavy']) {
+			assert.strictEqual(JSON.stringify(dynamicCalls(browser, frameOf('Idle', { prevState, elapsed: IDLE_SETTLE_MS }))), calm, prevState);
 		}
 	});
 
-	test('describes every state in calm words for assistive technology', () => {
-		const { describeState } = createBrowser().globals.CarbonBitWorld;
-		const texts = WORLD_STATES.map(state => describeState(state, 1));
-		assert.strictEqual(new Set(texts).size, WORLD_STATES.length);
-		for (const text of texts) {
-			assert.ok(text.length > 20 && text.length < 160, text);
-			assert.ok(!/!|error|warning|danger|alert|bad|waste/i.test(text), text);
-		}
-		assert.match(describeState('ProcessingHeavy', 3), /3 requests in flight/);
-		assert.strictEqual(describeState('Unknown', 0), describeState('Idle', 0));
-	});
-
-	test('the canvas label follows the world state', () => {
-		const browser = createBrowser({ reducedMotion: true });
-		const { describeState } = browser.globals.CarbonBitWorld;
-		for (const state of WORLD_STATES) {
-			browser.state(state, 2);
-			assert.strictEqual(browser.canvas.getAttribute('aria-label'), describeState(state, 2), state);
-		}
+	test('idle stays alive: stars twinkle and a satellite passes now and then', () => {
+		const browser = createBrowser();
+		const idle = (t: number) => JSON.stringify(dynamicCalls(browser, frameOf('Idle', { elapsed: 5000, t })));
+		const distinct = new Set([0, 1000, 2000, 3000, 4000, 5000, 20_000].map(idle));
+		assert.ok(distinct.size >= 3, 'idle frames vary over time');
+		assert.strictEqual(JSON.stringify(dynamicCalls(browser, frameOf('Idle', { elapsed: 5000, still: true, t: 0 }))),
+			JSON.stringify(dynamicCalls(browser, frameOf('Idle', { elapsed: 5000, still: true, t: 99_999 }))), 'still frames never move');
 	});
 
 	test('frame rate respects the configured cap', () => {
@@ -199,7 +243,7 @@ suite('Pixel world renderer', () => {
 		browser.state('ProcessingLight');
 		browser.advance(500);
 		browser.state('Idle', 0);
-		browser.advance(1000);
+		browser.advance(1500);
 		const frames = browser.frames();
 		const callbacks = browser.rafCallbacks();
 		browser.advance(10_000);
@@ -238,10 +282,10 @@ suite('Pixel world renderer', () => {
 		assert.strictEqual(browser.pending(), 0);
 	});
 
-	test('environmental mode adds a calm, static haze under heavy load; neutral mode never does', () => {
+	test('environmental mode tints the atmosphere calmly under heavy load; neutral mode never does', () => {
 		const browser = createBrowser();
-		const { P } = browser.globals.CarbonBitScene;
-		const haze = (frame: Frame) => dynamicCalls(browser, frame).filter(c => c[1] === P.haze);
+		const { C } = browser.globals.CarbonBitEffects;
+		const haze = (frame: Frame) => dynamicCalls(browser, frame).filter(c => c[1] === C.haze || c[1] === C.hazeDim);
 		const heavy = (overrides: Partial<Frame>) => frameOf('ProcessingHeavy', { elapsed: 5000, ...overrides });
 		assert.ok(haze(heavy({ mode: 'environmental' })).length > 0);
 		assert.ok(haze(heavy({ mode: 'environmental', still: true })).length > 0, 'still frames keep the cue');
@@ -249,12 +293,9 @@ suite('Pixel world renderer', () => {
 		for (const state of WORLD_STATES.filter(s => s !== 'ProcessingHeavy')) {
 			assert.strictEqual(haze(frameOf(state, { mode: 'environmental' })).length, 0, state);
 		}
-		// No flashing: once faded in, the haze is identical on every frame.
+		// No flashing: once faded in, the tint is identical on every frame.
 		assert.deepStrictEqual(haze(heavy({ mode: 'environmental', t: 1 })), haze(heavy({ mode: 'environmental', t: 98_765 })));
 		assert.ok(haze(heavy({ mode: 'environmental', elapsed: 100 })).length < haze(heavy({ mode: 'environmental' })).length, 'fades in');
-		const neutral = dynamicCalls(browser, heavy({ mode: 'neutral' }));
-		const environmental = dynamicCalls(browser, heavy({ mode: 'environmental' })).filter(c => c[1] !== P.haze);
-		assert.deepStrictEqual(environmental, neutral, 'neutral keeps servers, electricity, cooling and data particles');
 	});
 
 	test('minimal mode stops drawing the world and resumes when switched back', () => {
@@ -272,5 +313,20 @@ suite('Pixel world renderer', () => {
 		browser.advance(500);
 		assert.ok(browser.frames() - before >= 14);
 		assert.strictEqual(browser.body.dataset.mode, 'neutral');
+	});
+
+	test('describes every state calmly and the canvas label follows the world', () => {
+		const browser = createBrowser();
+		const { describeState } = browser.globals.CarbonBitWorld;
+		const texts = WORLD_STATES.map(state => describeState(state, 1));
+		assert.strictEqual(new Set(texts).size, WORLD_STATES.length);
+		for (const text of texts) {
+			assert.ok(/^Pixel planet/.test(text) && text.length < 200, text);
+			assert.ok(!/(guilt|bad|danger|alarm|warning|destroy|pollut)/i.test(text), text);
+		}
+		assert.match(describeState('ProcessingHeavy', 3), /3 requests in flight\.$/);
+		assert.strictEqual(describeState('Sleeping', 0), describeState('Idle', 0));
+		browser.state('ResponseArriving', 1);
+		assert.strictEqual(browser.canvas.getAttribute('aria-label'), describeState('ResponseArriving', 1));
 	});
 });

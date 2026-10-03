@@ -111,16 +111,19 @@ the world.
 
 ### The pixel world
 
-Two rooms joined by one wire: the developer's room on the left, the data hall on the right. The sky follows your
-local time of day (dawn, day, dusk, night). See [docs/WORLD_ART.md](docs/WORLD_ART.md) for the art direction.
+One small planet: the Earth seen from space. Day and night follow the real sun, city lights come on along the
+night side, clouds drift and the moon shows its real phase. A pin marks your place, taken from your timezone; it
+never leaves your machine. Requests arc over the planet to a data center drawn at one of the regions where cloud
+data centers cluster. It is illustrative, not where your requests actually ran. See
+[docs/WORLD_ART.md](docs/WORLD_ART.md) for the art direction.
 
 | State | What you see |
 | --- | --- |
-| Idle | A calm scene: drifting clouds, a bird on the wire, the developer typing now and then. |
-| Request starting | A cyan request travels along the wire to the data hall. |
-| Processing | Server racks light up, power flows and cooling vapour rises; intensity is light, medium or heavy. |
-| Response | A green reply returns to the monitor and a check mark appears, then the scene settles. |
-| Failure | A slow amber lamp blinks in the data hall; nothing red, nothing alarming. |
+| Idle | The planet, your pin and a quiet data center; stars twinkle and now and then a satellite passes. |
+| Request starting | Your pin lights up cyan and a light runs along the arc toward the data center. |
+| Processing | Light streams along the arc; the data center glows gold and vents cooling vapour; more with heavier load and more concurrent requests. |
+| Response | The arc turns green and the reply lands at your pin with a soft ring. |
+| Failure | The data center shows a slow amber light and the request stops halfway; nothing red, nothing alarming. |
 
 Claude Code and Copilot CLI write each model call to their logs only once it has finished. When such calls follow
 each other within 15 seconds, CarbonBit treats them as one agent loop at work and keeps the world processing.

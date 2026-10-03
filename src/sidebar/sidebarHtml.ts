@@ -61,7 +61,7 @@ export function getSidebarHtml(options: SidebarHtmlOptions): string {
 	<section class="stage" aria-labelledby="live-heading">
 		<h2 id="live-heading" class="visually-hidden">Live</h2>
 		<div class="world" id="world-frame">
-			<canvas id="world" width="160" height="90" role="img" aria-label="Pixel world, idle: a developer sits at a desk with a monitor under a clear sky, with trees nearby and a quiet data center in the background."></canvas>
+			<canvas id="world" width="160" height="90" role="img" aria-label="Pixel planet, idle: the Earth from space with drifting clouds; your place is marked and the data center is quiet."></canvas>
 		</div>
 		<div class="now" data-state="Idle" id="now">
 			<span class="pulse" aria-hidden="true"></span>
