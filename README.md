@@ -1,7 +1,7 @@
 <!-- prettier-ignore -->
 <div align="center">
 
-<img src="media/carbonbit.svg" alt="CarbonBit logo" height="96" />
+<img src="media/carbonbit.png" alt="CarbonBit logo" height="96" />
 
 # CarbonBit
 
