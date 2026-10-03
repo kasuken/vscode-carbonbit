@@ -1,0 +1,5 @@
+not json at all
+[1,2,3]
+{"type":"assistant","sessionId":"sess-m","timestamp":"2026-10-01T12:00:00.000Z","message":{"model":"claude-sonnet-4-5","content":[{"type":"text","text":"CANARY_NO_ID"}]}}
+{"type":"assistant","sessionId":"sess-m","timestamp":"not-a-date","message":{"id":"msg_bad_time","model":"claude-sonnet-4-5"}}
+{"type":"assistant","sessionId":"sess-m","timestamp":"2026-10-01T12:00:01.000Z","message":{"id":"msg_bad_counts","model":"claude-sonnet-4-5","content":[{"type":"text","text":"CANARY_BAD_COUNTS"}],"stop_reason":"end_turn","usage":{"input_tokens":-5,"output_tokens":"12","cache_read_input_tokens":10}}}

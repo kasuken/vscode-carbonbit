@@ -24,4 +24,24 @@ export default [{
         "no-throw-literal": "warn",
         semi: "warn",
     },
+}, {
+    // Webview scripts ship as-is (no build step), so lint them as browser scripts.
+    files: ["media/**/*.js"],
+    languageOptions: {
+        ecmaVersion: 2022,
+        sourceType: "script",
+        globals: {
+            acquireVsCodeApi: "readonly",
+            window: "readonly",
+            document: "readonly",
+            ResizeObserver: "readonly",
+        },
+    },
+    rules: {
+        "no-undef": "error",
+        "no-unused-vars": "warn",
+        curly: "warn",
+        eqeqeq: "warn",
+        semi: "warn",
+    },
 }];

@@ -1,0 +1,4 @@
+{"type":"session.resume","id":"ev-p1","timestamp":"2026-10-01T13:00:00.000Z","parentId":null,"data":{"resumeTime":"2026-10-01T13:00:00.000Z","selectedModel":"some-future-model","context":{"cwd":"CANARY_PATH"}}}
+{"type":"assistant.message","id":"ev-p2","timestamp":"2026-10-01T13:00:03.000Z","parentId":"ev-p1","data":{"messageId":"m-old","content":"CANARY_OLD_REPLY_TEXT"}}
+{"type":"assistant.message","id":"ev-p3","timestamp":"2026-10-01T13:00:04.000Z","parentId":"ev-p2","data":{"messageId":"m-tools-only","toolRequests":[{"name":"view","arguments":{"path":"CANARY_PATH"}}]}}
+{"type":"assistant.message","id":"ev-p4","timestamp":"2026-10-01T13:00:06.000Z","parentId":"ev-p3","data":{"messageId":"m-late","model":"gpt-5-mini","content":"CANARY_RESPONSE","outputT

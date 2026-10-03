@@ -1,0 +1,9 @@
+{"kind":0,"v":{"version":3,"creationDate":1790000000000,"sessionId":"session-available","requests":[],"inputState":{"inputText":"CANARY_INPUT_TEXT"}}}
+{"kind":2,"k":["requests"],"v":[{"requestId":"request_1","timestamp":1790000000000,"agent":{"id":"github.copilot.editsAgent"},"modelId":"copilot/gpt-4.1","modelState":{"value":0},"message":{"text":"CANARY_PROMPT_TEXT","parts":[]},"response":[],"variableData":{"variables":[]}}]}
+{"kind":2,"k":["requests",0,"response"],"v":[{"value":"CANARY_RESPONSE_TEXT","supportThemeIcons":false}]}
+{"kind":1,"k":["requests",0,"completionTokens"],"v":120}
+{"kind":1,"k":["requests",0,"promptTokens"],"v":3400}
+{"kind":1,"k":["requests",0,"result"],"v":{"timings":{"firstProgress":800,"totalElapsed":4000},"metadata":{"resolvedModel":"gpt-4.1-2025-04-14","promptTokens":3400,"outputTokens":120,"renderedUserMessage":"CANARY_PROMPT_TEXT"}}}
+{"kind":1,"k":["requests",0,"modelState"],"v":{"value":1,"completedAt":1790000004000}}
+{"kind":1,"k":["requests",0,"elapsedMs"],"v":4000}
+{"kind":2,"k":["requests"],"v":[{"requestId":"request_2","timestamp":1790000010000,"modelId":"copilot/Some-Future-Model","modelState":{"value":1,"completedAt":1790000012000},"promptTokens":500,"completionTokens":50,"message":{"text":"CANARY_PROMPT_TEXT","parts":[]},"response":[{"value":"CANARY_RESPONSE_TEXT"}]}]}

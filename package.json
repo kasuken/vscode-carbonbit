@@ -3,28 +3,114 @@
   "displayName": "CarbonBit",
   "description": "CarbonBit is a VS Code extension that turns AI coding activity into understandable environmental impact estimates through real-time metrics and a reactive 16-bit world.",
   "version": "0.0.1",
+  "publisher": "emanuelebartolesi",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kasuken/vscode-carbonbit.git"
+  },
   "engines": {
     "vscode": "^1.138.0"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "carbonbit",
+          "title": "CarbonBit",
+          "icon": "media/carbonbit.svg"
+        }
+      ]
+    },
+    "views": {
+      "carbonbit": [
+        {
+          "type": "webview",
+          "id": "carbonbit.sidebar",
+          "name": "CarbonBit"
+        }
+      ]
+    },
     "commands": [
       {
-        "command": "vscode-carbonbit.helloWorld",
-        "title": "Hello World"
+        "command": "carbonbit.openSidebar",
+        "title": "Open",
+        "category": "CarbonBit"
+      },
+      {
+        "command": "carbonbit.refreshUsage",
+        "title": "Refresh Usage",
+        "category": "CarbonBit"
+      },
+      {
+        "command": "carbonbit.showDetails",
+        "title": "Show Details",
+        "category": "CarbonBit"
+      },
+      {
+        "command": "carbonbit.showMethodology",
+        "title": "Show Methodology",
+        "category": "CarbonBit"
+      },
+      {
+        "command": "carbonbit.clearLocalData",
+        "title": "Clear Local Data",
+        "category": "CarbonBit"
+      },
+      {
+        "command": "carbonbit.openDiagnostics",
+        "title": "Open Diagnostics",
+        "category": "CarbonBit"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "CarbonBit",
+      "properties": {
+        "carbonbit.animation.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Animate the pixel world. When disabled, the world shows a still frame for each state."
+        },
+        "carbonbit.animation.maxFps": {
+          "type": "integer",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 60,
+          "description": "Maximum frames per second for the pixel world animation."
+        },
+        "carbonbit.visualMode": {
+          "type": "string",
+          "default": "environmental",
+          "enum": ["environmental", "neutral", "minimal"],
+          "enumDescriptions": [
+            "Pixel world with environmental cues that react to AI activity.",
+            "Pixel world showing servers, electricity and cooling without environmental degradation.",
+            "No complex animation; shows the active model and live estimates only."
+          ],
+          "description": "How CarbonBit visualizes AI activity."
+        },
+        "carbonbit.dataRetentionDays": {
+          "type": "integer",
+          "default": 90,
+          "enum": [7, 30, 90, 365, 0],
+          "enumItemLabels": ["7 days", "30 days", "90 days", "365 days", "Unlimited"],
+          "description": "How long locally stored AI usage history is kept. Older requests are deleted automatically. 0 keeps history indefinitely."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src",
+    "lint": "eslint src media",
     "test": "vscode-test"
   },
   "devDependencies": {

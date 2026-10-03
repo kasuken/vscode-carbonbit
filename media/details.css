@@ -1,0 +1,444 @@
+:root {
+	color-scheme: light dark;
+	/* Same accents as the sidebar: ember marks CO₂e, tide marks water. Text stays in theme ink. */
+	--cb-ember: #e0a458;
+	--cb-tide: #5fb3c8;
+	--cb-line: var(--vscode-widget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
+}
+
+body.vscode-light {
+	--cb-ember: #a35f12;
+	--cb-tide: #1f7189;
+}
+
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+	--cb-line: var(--vscode-contrastBorder);
+	--cb-ember: var(--vscode-foreground);
+	--cb-tide: var(--vscode-foreground);
+}
+
+[hidden] {
+	display: none !important;
+}
+
+body {
+	margin: 0;
+	padding: 12px 20px 24px;
+	color: var(--vscode-foreground);
+	background-color: var(--vscode-editor-background);
+	font-family: var(--vscode-font-family);
+	font-size: var(--vscode-font-size);
+	font-weight: var(--vscode-font-weight);
+	line-height: 1.4;
+}
+
+header,
+main {
+	max-width: 1120px;
+}
+
+h1 {
+	margin: 0 0 4px;
+	font-size: 1.4em;
+	font-weight: 600;
+}
+
+h2 {
+	margin: 20px 0 6px;
+	font-size: 1.1em;
+	font-weight: 600;
+}
+
+h3 {
+	margin: 16px 0 4px;
+	font-size: 1em;
+	font-weight: 600;
+}
+
+p {
+	margin: 0 0 8px;
+}
+
+ul {
+	margin: 0 0 8px;
+	padding-left: 20px;
+}
+
+li {
+	margin: 2px 0;
+}
+
+a {
+	color: var(--vscode-textLink-foreground);
+	overflow-wrap: anywhere;
+}
+
+a:hover,
+a:active {
+	color: var(--vscode-textLink-activeForeground);
+}
+
+.note {
+	color: var(--vscode-descriptionForeground);
+}
+
+/* Footprint over time: one row per measure, one column per period, like a ledger. */
+.footprint > .note {
+	max-width: 72ch;
+}
+
+.impact {
+	margin-top: 14px;
+	padding-left: 14px;
+	border-left: 4px solid var(--cb-ember);
+}
+
+.impact-water {
+	border-left-color: var(--cb-tide);
+}
+
+.impact h3 {
+	margin: 0 0 8px;
+}
+
+.period-columns {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 12px 24px;
+}
+
+.period {
+	min-width: 0;
+}
+
+.period-label {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0 6px;
+	margin: 0;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--vscode-descriptionForeground);
+}
+
+.period-note {
+	font-weight: 400;
+}
+
+.period-value {
+	margin: 2px 0 8px;
+	font-size: 20px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: -0.01em;
+}
+
+.equivalents {
+	display: grid;
+	grid-template-columns: 18px max-content minmax(0, 1fr);
+	align-items: center;
+	gap: 4px 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.equivalent {
+	display: contents;
+}
+
+.pixel-icon {
+	width: 18px;
+	height: 18px;
+	color: var(--vscode-foreground);
+}
+
+.amount {
+	justify-self: end;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.unit {
+	min-width: 0;
+	color: var(--vscode-descriptionForeground);
+}
+
+/* Tabs */
+.tabs {
+	display: flex;
+	gap: 4px;
+	margin-top: 12px;
+	border-bottom: 1px solid var(--vscode-panel-border, var(--vscode-contrastBorder, transparent));
+}
+
+[role="tab"] {
+	padding: 6px 10px;
+	border: none;
+	border-bottom: 2px solid transparent;
+	font: inherit;
+	color: var(--vscode-panelTitle-inactiveForeground, var(--vscode-descriptionForeground));
+	background: none;
+	cursor: pointer;
+}
+
+[role="tab"][aria-selected="true"] {
+	color: var(--vscode-panelTitle-activeForeground, var(--vscode-foreground));
+	border-bottom-color: var(--vscode-panelTitle-activeBorder, var(--vscode-focusBorder));
+}
+
+[role="tabpanel"]:focus-visible,
+button:focus-visible,
+a:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 2px;
+}
+
+/* Tables */
+table {
+	width: 100%;
+	margin: 0 0 8px;
+	border-collapse: collapse;
+}
+
+caption {
+	padding: 0 0 6px;
+	text-align: left;
+	color: var(--vscode-descriptionForeground);
+}
+
+th,
+td {
+	padding: 4px 8px;
+	border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
+	text-align: left;
+	vertical-align: top;
+}
+
+thead th {
+	font-weight: 600;
+	color: var(--vscode-descriptionForeground);
+}
+
+tbody th {
+	font-weight: 400;
+	overflow-wrap: break-word;
+}
+
+/* Long unbroken model names may wrap anywhere instead of widening the table. */
+.models tbody th {
+	min-width: 8em;
+	overflow-wrap: anywhere;
+}
+
+.num {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+table.summary {
+	max-width: 640px;
+}
+
+/* Confidence badges: text carries the level; colour is only a secondary cue. */
+.confidence {
+	padding: 1px 8px;
+	border: 1px solid var(--vscode-contrastBorder, var(--confidence-color));
+	border-left: 4px solid var(--confidence-color);
+	border-radius: 2px;
+	font: inherit;
+	color: var(--vscode-foreground);
+	background-color: var(--vscode-editorWidget-background, transparent);
+	cursor: pointer;
+	white-space: nowrap;
+	--confidence-color: var(--vscode-descriptionForeground);
+}
+
+.confidence::after {
+	content: " \25BE";
+	color: var(--vscode-descriptionForeground);
+}
+
+.confidence[aria-expanded="true"]::after {
+	content: " \25B4";
+}
+
+.confidence:hover {
+	background-color: var(--vscode-list-hoverBackground);
+}
+
+.confidence-high {
+	--confidence-color: var(--vscode-charts-green, var(--vscode-foreground));
+}
+
+.confidence-medium {
+	--confidence-color: var(--vscode-charts-yellow, var(--vscode-foreground));
+}
+
+.confidence-low {
+	--confidence-color: var(--vscode-charts-orange, var(--vscode-foreground));
+}
+
+.confidence-line {
+	margin-top: 4px;
+}
+
+.explanation {
+	padding: 8px 12px;
+	border-left: 2px solid var(--vscode-textBlockQuote-border, var(--vscode-focusBorder));
+	background-color: var(--vscode-textBlockQuote-background, transparent);
+}
+
+div.explanation {
+	max-width: 640px;
+	margin-bottom: 8px;
+}
+
+.explanation-lines {
+	display: grid;
+	grid-template-columns: max-content minmax(0, 1fr);
+	gap: 2px 12px;
+	margin: 0;
+}
+
+.explanation-lines div {
+	display: contents;
+}
+
+.explanation-lines dt {
+	font-weight: 600;
+}
+
+.explanation-lines dd {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+/* Provider share */
+.share {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.bar {
+	display: block;
+	flex: 1 1 auto;
+	min-width: 24px;
+	max-width: 200px;
+	height: 6px;
+	overflow: hidden;
+	outline: 1px solid var(--vscode-contrastBorder, transparent);
+	background-color: var(--vscode-scrollbarSlider-background);
+}
+
+.bar-fill {
+	display: block;
+	height: 100%;
+	width: 0;
+	background-color: var(--vscode-charts-green, var(--vscode-progressBar-background));
+	transition: width 200ms ease-out;
+}
+
+.share-text {
+	min-width: 3.5em;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.source-id {
+	font-family: var(--vscode-editor-font-family, monospace);
+}
+
+.actions {
+	margin-top: 12px;
+}
+
+button.secondary {
+	padding: 4px 10px;
+	border: 1px solid var(--vscode-button-border, var(--vscode-contrastBorder, transparent));
+	border-radius: 2px;
+	font: inherit;
+	color: var(--vscode-button-secondaryForeground);
+	background-color: var(--vscode-button-secondaryBackground);
+	cursor: pointer;
+}
+
+button.secondary:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+body.vscode-high-contrast th,
+body.vscode-high-contrast td {
+	border-bottom-color: var(--vscode-contrastBorder);
+}
+
+/* Narrow panels: each model becomes a labelled block instead of a wide row. */
+@media (max-width: 560px) {
+	body {
+		padding: 8px 12px 16px;
+	}
+
+	.models thead {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+	}
+
+	.models tr,
+	.models th,
+	.models td {
+		display: block;
+	}
+
+	.models tbody th {
+		padding-top: 8px;
+		border-bottom: none;
+		font-weight: 600;
+	}
+
+	.models td {
+		display: flex;
+		justify-content: space-between;
+		gap: 8px;
+		border-bottom: none;
+		padding: 1px 8px;
+	}
+
+	.models td::before {
+		content: attr(data-label);
+		color: var(--vscode-descriptionForeground);
+	}
+
+	.models td.explanation {
+		display: block;
+		margin: 4px 0 8px;
+		padding: 8px 12px;
+	}
+
+	.models tr:not(.explanation-row) {
+		border-top: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
+	}
+
+	.explanation-lines {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.explanation-lines dd {
+		margin-bottom: 4px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		transition: none !important;
+		animation: none !important;
+	}
+}

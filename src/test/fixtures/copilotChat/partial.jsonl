@@ -1,0 +1,5 @@
+{"kind":0,"v":{"version":3,"sessionId":"session-partial","requests":[{"requestId":"request_pending","timestamp":1790000000000,"modelId":"copilot/auto","modelState":{"value":0},"message":{"text":"CANARY_PROMPT_TEXT"},"response":[]}]}}
+{"kind":2,"k":["requests"],"v":[{"requestId":"request_no_counts","timestamp":1790000001000,"modelState":{"value":1,"completedAt":1790000003000},"message":{"text":"CANARY_PROMPT_TEXT"},"response":[{"value":"CANARY_RESPONSE_TEXT"},{"kind":"thinking","value":"CANARY_THINKING_TEXT"},{"kind":"toolInvocationSerialized","invocationMessage":"CANARY_TOOL_TEXT"}]}]}
+{"kind":2,"k":["requests"],"v":[{"requestId":"request_input_only","timestamp":1790000004000,"modelId":"copilot/claude-sonnet-4.5","modelState":{"value":2,"completedAt":1790000005000},"promptTokens":900,"message":{"text":"CANARY_PROMPT_TEXT"},"response":[]}]}
+{"kind":2,"k":["requests"],"v":[{"requestId":"request_no_timestamp","modelId":"copilot/gpt-4.1","message":{"text":"CANARY_PROMPT_TEXT"},"response":[]}]}
+{"kind":1,"k":["requests",0,"modelState"],"v":{"value":1,"comp

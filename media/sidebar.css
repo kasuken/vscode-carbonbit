@@ -1,0 +1,585 @@
+/*
+ * CarbonBit sidebar. Base colours come from the VS Code theme; two accents carry meaning:
+ * ember (CO₂e, combustion) and tide (water, cooling). Text always uses theme ink; colour only marks identity.
+ * The pixel world, the pixel icons and the stepped bars are the one loud element; everything else stays quiet.
+ */
+:root {
+	color-scheme: light dark;
+	--cb-ink: var(--vscode-foreground);
+	--cb-muted: var(--vscode-descriptionForeground);
+	--cb-line: var(--vscode-widget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
+	--cb-surface: var(--vscode-sideBar-background, var(--vscode-editor-background));
+	--cb-raised: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+	--cb-focus: var(--vscode-focusBorder);
+	--cb-ember: #e0a458;
+	--cb-tide: #5fb3c8;
+	--cb-live: #7cc46e;
+	--cb-warn: var(--vscode-editorWarning-foreground, #cca700);
+	--cb-series-1: #3987e5;
+	--cb-series-2: #d95926;
+	--cb-series-3: #199e70;
+	--cb-series-4: #c98500;
+	--cb-pixel: 2px;
+	--cb-gap: 16px;
+}
+
+body.vscode-light {
+	--cb-ember: #a35f12;
+	--cb-tide: #1f7189;
+	--cb-live: #2f7d32;
+	--cb-series-1: #2a78d6;
+	--cb-series-2: #eb6834;
+	--cb-series-3: #1baf7a;
+	--cb-series-4: #eda100;
+}
+
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+	--cb-line: var(--vscode-contrastBorder);
+	--cb-ember: var(--vscode-foreground);
+	--cb-tide: var(--vscode-foreground);
+	--cb-live: var(--vscode-foreground);
+}
+
+[hidden] {
+	display: none !important;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	padding: 10px 14px 16px;
+	min-width: 0;
+	color: var(--cb-ink);
+	background-color: var(--cb-surface);
+	font-family: var(--vscode-font-family);
+	font-size: var(--vscode-font-size);
+	font-weight: var(--vscode-font-weight);
+	line-height: 1.4;
+}
+
+p,
+ul,
+dl,
+dd,
+h2,
+h3 {
+	margin: 0;
+}
+
+ul {
+	padding: 0;
+	list-style: none;
+}
+
+body > section,
+body > footer {
+	margin-top: var(--cb-gap);
+}
+
+body > section:first-child {
+	margin-top: 0;
+}
+
+.visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}
+
+h2 {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--cb-ink);
+}
+
+h3 {
+	margin-top: 10px;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.section-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 8px;
+	padding-bottom: 4px;
+	border-bottom: 1px solid var(--cb-line);
+}
+
+.aside,
+.note {
+	font-size: 11px;
+	color: var(--cb-muted);
+}
+
+.aside {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Stage: the world and its status strip read as one pixel-framed screen. */
+.stage {
+	--notch: calc(var(--cb-pixel) * 2);
+	clip-path: polygon(
+		0 var(--notch), var(--cb-pixel) var(--notch), var(--cb-pixel) var(--cb-pixel), var(--notch) var(--cb-pixel), var(--notch) 0,
+		calc(100% - var(--notch)) 0, calc(100% - var(--notch)) var(--cb-pixel), calc(100% - var(--cb-pixel)) var(--cb-pixel), calc(100% - var(--cb-pixel)) var(--notch), 100% var(--notch),
+		100% calc(100% - var(--notch)), calc(100% - var(--cb-pixel)) calc(100% - var(--notch)), calc(100% - var(--cb-pixel)) calc(100% - var(--cb-pixel)), calc(100% - var(--notch)) calc(100% - var(--cb-pixel)), calc(100% - var(--notch)) 100%,
+		var(--notch) 100%, var(--notch) calc(100% - var(--cb-pixel)), var(--cb-pixel) calc(100% - var(--cb-pixel)), var(--cb-pixel) calc(100% - var(--notch)), 0 calc(100% - var(--notch))
+	);
+	background-color: var(--cb-raised);
+}
+
+/* Fixed 16:9 frame; world/renderer.js picks an integer scale that fits and the canvas is centred. */
+.world {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	aspect-ratio: 16 / 9;
+	max-height: 50vh;
+	overflow: hidden;
+	background-color: var(--vscode-editor-background);
+}
+
+canvas {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	image-rendering: pixelated;
+}
+
+.now {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	align-items: center;
+	column-gap: 8px;
+	row-gap: 2px;
+	padding: 8px 10px 9px;
+	border-top: var(--cb-pixel) solid var(--cb-line);
+}
+
+.pulse {
+	width: 8px;
+	height: 8px;
+	background-color: var(--cb-muted);
+}
+
+.now[data-state^="Processing"] .pulse,
+.now[data-state="RequestStarting"] .pulse {
+	background-color: var(--cb-ember);
+	animation: cb-blink 1s steps(2, jump-none) infinite;
+}
+
+.now[data-state="ResponseArriving"] .pulse {
+	background-color: var(--cb-live);
+}
+
+.now[data-state="Failed"] .pulse {
+	background-color: var(--cb-warn);
+}
+
+@keyframes cb-blink {
+	from { opacity: 1; }
+	to { opacity: 0.25; }
+}
+
+.status {
+	min-width: 0;
+	overflow: hidden;
+	font-weight: 600;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.badge {
+	padding: 0 6px;
+	font-size: 11px;
+	color: var(--vscode-badge-foreground);
+	background-color: var(--vscode-badge-background);
+}
+
+.source {
+	grid-column: 2 / -1;
+	display: flex;
+	flex-wrap: wrap;
+	column-gap: 6px;
+	min-width: 0;
+	font-size: 12px;
+	color: var(--cb-muted);
+}
+
+.source span {
+	white-space: nowrap;
+}
+
+.source .live-provider {
+	color: var(--cb-ink);
+}
+
+.source .live-model {
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.source .live-tokens,
+.source .live-age {
+	font-variant-numeric: tabular-nums;
+}
+
+.source .live-failed {
+	color: var(--cb-warn);
+}
+
+/* Last hour: one bar per two minutes, stepped in whole pixels. */
+.bars {
+	display: flex;
+	align-items: flex-end;
+	gap: 2px;
+	height: 30px;
+	padding-bottom: 2px;
+	border-bottom: var(--cb-pixel) solid var(--cb-line);
+}
+
+.bar {
+	flex: 1 1 0;
+	min-width: 2px;
+	background-color: var(--cb-tide);
+	opacity: 0.55;
+}
+
+.bar-now {
+	opacity: 1;
+}
+
+.bar:hover {
+	opacity: 1;
+	outline: 1px solid var(--cb-ink);
+}
+
+.session {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.session div,
+.metrics div {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.session dt,
+.metrics dt {
+	font-size: 11px;
+	color: var(--cb-muted);
+}
+
+.session dd,
+.metrics dd {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
+/* Period tabs: square, quiet, with a pixel underline on the selected one. */
+.periods {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	margin-bottom: 12px;
+	border: 1px solid var(--cb-line);
+}
+
+.periods button {
+	min-width: 0;
+	padding: 4px 2px 3px;
+	overflow: hidden;
+	font: inherit;
+	font-size: 11px;
+	color: var(--cb-muted);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	background: transparent;
+	border: 0;
+	border-bottom: var(--cb-pixel) solid transparent;
+	cursor: pointer;
+}
+
+.periods button + button {
+	border-left: 1px solid var(--cb-line);
+}
+
+.periods button:hover {
+	color: var(--cb-ink);
+	background-color: var(--vscode-list-hoverBackground);
+}
+
+.periods button[aria-selected="true"] {
+	color: var(--cb-ink);
+	font-weight: 600;
+	border-bottom-color: var(--cb-ink);
+	background-color: var(--cb-raised);
+}
+
+.impact {
+	padding-left: 10px;
+	border-left: calc(var(--cb-pixel) * 2) solid var(--cb-ember);
+}
+
+.impact-water {
+	margin-top: 14px;
+	border-left-color: var(--cb-tide);
+}
+
+.figure {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.figure-label {
+	font-size: 12px;
+	color: var(--cb-muted);
+}
+
+.figure-value {
+	font-size: 22px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: -0.01em;
+	line-height: 1.2;
+}
+
+.same-as {
+	margin: 2px 0 6px;
+	font-size: 11px;
+	color: var(--cb-muted);
+}
+
+.equivalents {
+	display: grid;
+	grid-template-columns: 18px max-content minmax(0, 1fr);
+	align-items: center;
+	column-gap: 8px;
+	row-gap: 4px;
+}
+
+.equivalents:empty {
+	display: none;
+}
+
+.impact:has(.equivalents:empty) .same-as {
+	display: none;
+}
+
+.equivalent {
+	display: contents;
+}
+
+.pixel-icon {
+	width: 18px;
+	height: 18px;
+	color: var(--cb-ink);
+}
+
+.amount {
+	justify-self: end;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.unit {
+	min-width: 0;
+	color: var(--cb-muted);
+}
+
+.metrics {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+	margin-top: 14px;
+}
+
+.footprint .note {
+	margin-top: 10px;
+}
+
+/* Tools: one stacked bar (2px gaps) plus a legend that carries the numbers. */
+.stack {
+	display: flex;
+	gap: 2px;
+	height: 8px;
+	margin-bottom: 8px;
+}
+
+.segment {
+	min-width: 2px;
+}
+
+.providers {
+	display: grid;
+	gap: 4px;
+}
+
+.provider {
+	display: grid;
+	grid-template-columns: 8px minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 8px;
+}
+
+.swatch {
+	width: 8px;
+	height: 8px;
+}
+
+.provider-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.provider-share {
+	font-variant-numeric: tabular-nums;
+	color: var(--cb-muted);
+}
+
+.provider-github-copilot .swatch,
+.segment.provider-github-copilot {
+	background-color: var(--cb-series-1);
+}
+
+.provider-github-copilot-cli .swatch,
+.segment.provider-github-copilot-cli {
+	background-color: var(--cb-series-2);
+}
+
+.provider-claude-code .swatch,
+.segment.provider-claude-code {
+	background-color: var(--cb-series-3);
+}
+
+.provider-codex-cli .swatch,
+.segment.provider-codex-cli {
+	background-color: var(--cb-series-4);
+}
+
+/* Onboarding and empty state. */
+.card {
+	padding: 12px;
+	background-color: var(--cb-raised);
+	border: 1px solid var(--cb-line);
+}
+
+.card h2 {
+	margin-bottom: 6px;
+	font-size: 13px;
+}
+
+.card p + p {
+	margin-top: 6px;
+}
+
+.tools {
+	display: grid;
+	gap: 2px;
+	margin-top: 4px;
+}
+
+.tool {
+	display: flex;
+	gap: 6px;
+}
+
+.tool-mark {
+	width: 1em;
+	text-align: center;
+}
+
+.tool-tracking .tool-mark {
+	color: var(--cb-live);
+}
+
+.tool-failed .tool-mark {
+	color: var(--cb-warn);
+}
+
+.tool-state {
+	margin-left: auto;
+	color: var(--cb-muted);
+}
+
+.actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+.footer .actions {
+	margin-top: 0;
+}
+
+.footer .note {
+	margin-top: 8px;
+}
+
+button {
+	font-family: inherit;
+}
+
+.actions button {
+	padding: 4px 12px;
+	font-size: 12px;
+	color: var(--vscode-button-foreground);
+	background-color: var(--vscode-button-background);
+	border: 1px solid var(--vscode-button-border, transparent);
+	cursor: pointer;
+}
+
+.actions button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+
+.actions button.secondary {
+	color: var(--vscode-button-secondaryForeground);
+	background-color: var(--vscode-button-secondaryBackground);
+}
+
+.actions button.secondary:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+button:focus-visible {
+	outline: 1px solid var(--cb-focus);
+	outline-offset: 2px;
+}
+
+/* Minimal mode keeps only the numbers. */
+body[data-mode="minimal"] .world {
+	display: none;
+}
+
+body[data-mode="minimal"] .now {
+	border-top: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.now .pulse {
+		animation: none !important;
+	}
+}

@@ -1,0 +1,8 @@
+not json at all
+[1,2,3]
+{"kind":"set"}
+{"kind":1,"k":["requests",99,"promptTokens"],"v":5}
+{"kind":2,"k":["requests"],"v":[{"noRequestId":true,"message":{"text":"CANARY_PROMPT_TEXT"}}]}
+{"kind":2,"k":["requests"],"v":[{"requestId":"request_bad_counts","timestamp":1790000000000,"modelId":"","promptTokens":-5,"completionTokens":"12","modelState":{"value":1,"completedAt":1790000002000},"message":{"text":"CANARY_PROMPT_TEXT"},"response":[]}]}
+{"kind":1,"k":["requests",1,"result"],"v":{"errorDetails":{"message":"CANARY_ERROR_TEXT"}}}
+{"kind":7,"k":["requests"],"v":null}

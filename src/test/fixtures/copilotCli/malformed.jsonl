@@ -1,0 +1,5 @@
+not json at all
+{"type":"assistant.message"}
+{"type":"assistant.message","id":"ev-m1","timestamp":"2026-10-01T14:00:00.000Z","data":{"content":"CANARY_NO_ID","outputTokens":5}}
+{"type":"assistant.message","id":"ev-m2","timestamp":"2026-10-01T14:00:01.000Z","data":{"messageId":"m-bad-count","model":"gpt-5-mini","content":"CANARY_BAD_COUNT","outputTokens":-1}}
+{"type":"session.shutdown","id":"ev-m3","timestamp":"2026-10-01T14:00:02.000Z","data":{"modelMetrics":"CANARY_NOT_AN_OBJECT"}}
