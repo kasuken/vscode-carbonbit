@@ -358,6 +358,8 @@ suite('Details webview script', () => {
 			});
 		}
 		assert.strictEqual(page.el('footprint-unavailable').hidden, true);
+		page.send({ type: 'details', ...details, periods: [{ ...details.periods[2], coverage: 'none' }] });
+		assert.deepStrictEqual(page.el('footprint-carbon').children[0].children.slice(1).map(c => c.text), ['No data', 'Nothing recorded for this period in the local logs.']);
 		page.send({ type: 'details', ...details, periods: [] });
 		assert.strictEqual(page.el('footprint-carbon').children.length, 0);
 		assert.strictEqual(page.el('footprint-unavailable').hidden, false);

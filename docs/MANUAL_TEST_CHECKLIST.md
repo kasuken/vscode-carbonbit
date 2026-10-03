@@ -26,6 +26,8 @@ Covers VS Code and live-provider integration that unit tests can't exercise. The
 - [ ] Copilot Chat in a *different* VS Code window (another folder) animates the world and updates totals.
 - [ ] Close VS Code, use Claude Code or Codex CLI and Copilot Chat in another window, reopen: the output channel logs
       `imported N update(s) since the previous run`, today's totals include that usage, and the world stays Idle.
+- [ ] Fresh install (or existing install before the history backfill): the output channel logs `importing usage history since <date>`; once it finishes, "Last month" and "30 days" show past usage; a reload does not import it again.
+- [ ] A period before the earliest log shows "no data" (sidebar message, details column) instead of zeros; a partly covered period says "data from <day>".
 - [ ] The import does not freeze the editor (no "extension host unresponsive" entries attributed to CarbonBit).
 
 ## World and visuals

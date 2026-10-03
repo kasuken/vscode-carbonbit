@@ -268,6 +268,10 @@
 		const note = selected && selected.note ? selected.note : '';
 		setText('period-note', note);
 		setHidden('period-note', !note);
+		// Nothing recorded is not the same as nothing used: say so instead of showing zeros.
+		const empty = Boolean(selected && selected.coverage === 'none');
+		setHidden('period-empty', !empty);
+		setHidden('period-figures', empty);
 		const footprint = byId('footprint-panel');
 		if (footprint) {
 			footprint.dataset.period = period;

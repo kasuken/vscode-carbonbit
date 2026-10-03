@@ -50,6 +50,9 @@ function openDatabase(sqlite: SqliteModule, location: string, migrations: readon
 		db.exec('PRAGMA busy_timeout = 3000');
 		if (location !== ':memory:') {
 			db.exec('PRAGMA journal_mode = WAL');
+			// WAL stays consistent with NORMAL; FULL would flush to disk on every request (~2.5 ms each),
+			// which blocks the extension host for a minute during a large history import.
+			db.exec('PRAGMA synchronous = NORMAL');
 		}
 		const check = db.prepare('PRAGMA quick_check').get();
 		if (check?.quick_check !== 'ok') {

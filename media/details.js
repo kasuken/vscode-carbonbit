@@ -187,6 +187,11 @@
 			head.appendChild(element('span', 'period-note', period.note));
 		}
 		column.appendChild(head);
+		if (period.coverage === 'none') {
+			column.appendChild(element('p', 'period-value period-value-empty', 'No data'));
+			column.appendChild(element('p', 'note', 'Nothing recorded for this period in the local logs.'));
+			return column;
+		}
 		const text = period.totals && period.totals.text ? period.totals.text : {};
 		column.appendChild(element('p', 'period-value', text[kind] || EMPTY));
 		const items = list(period[kind]);

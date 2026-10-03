@@ -67,9 +67,10 @@ flowchart LR
 Each provider starts, stops and fails independently, so one broken log format never takes the others down.
 
 Usage from every project is tracked, whichever VS Code window or terminal it comes from. When CarbonBit starts,
-it imports in the background the usage logged since it last ran (on first run: since local midnight, and never
-beyond `carbonbit.dataRetentionDays`). Imported requests count towards totals and history, but don't animate
-the world.
+it imports in the background the usage logged since it last ran. The first time, it imports whatever history your
+tools' local logs still hold, up to `carbonbit.dataRetentionDays` (at most a year), so the last month and the
+30-day view aren't empty. Imported requests count towards totals and history, but don't animate the world. A period
+from before your tools' logs begin shows "no data" instead of zero.
 
 ## Features
 

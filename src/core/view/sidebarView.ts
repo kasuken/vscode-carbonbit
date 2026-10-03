@@ -82,10 +82,17 @@ const PERIOD_LABELS: Record<PeriodId, string> = {
 	projectedYear: 'Projected year',
 };
 
+const shortDate = (ms: number) => new Date(ms).toLocaleString('en', { day: 'numeric', month: 'short' });
+
 function periodNote(summary: PeriodSummary): string | null {
+	const since = summary.coverage === 'partial' && summary.dataFrom !== null ? `data from ${shortDate(summary.dataFrom)}` : null;
 	switch (summary.id) {
-		case 'previousMonth':
-			return new Date(summary.from).toLocaleString('en', { month: 'long', year: 'numeric' });
+		case 'previousMonth': {
+			const month = new Date(summary.from).toLocaleString('en', { month: 'long', year: 'numeric' });
+			return summary.coverage === 'none' ? `${month}, no data` : since ? `${month}, ${since}` : month;
+		}
+		case 'last30Days':
+			return summary.coverage === 'none' ? 'No data yet' : since ? `${since[0].toUpperCase()}${since.slice(1)}` : null;
 		case 'projectedYear':
 			return summary.basisDays ? `From ${summary.basisDays} day${summary.basisDays === 1 ? '' : 's'} of usage` : 'No usage to project yet';
 		default:
@@ -101,6 +108,7 @@ export function periodView(summary: PeriodSummary): PeriodView {
 		id: summary.id,
 		label: PERIOD_LABELS[summary.id],
 		note: periodNote(summary),
+		coverage: summary.coverage,
 		totals: todayView(summary.totals),
 		carbon: carbon.map(toView),
 		water: water.map(toView),

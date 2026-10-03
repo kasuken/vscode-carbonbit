@@ -53,6 +53,10 @@ export interface LiveView {
 export const PERIOD_IDS = ['today', 'last30Days', 'previousMonth', 'projectedYear'] as const;
 export type PeriodId = (typeof PERIOD_IDS)[number];
 
+/** Whether recorded history covers the whole period, part of it, or none of it. */
+export const PERIOD_COVERAGES = ['full', 'partial', 'none'] as const;
+export type PeriodCoverage = (typeof PERIOD_COVERAGES)[number];
+
 /** One everyday comparison, e.g. amount `1.16` and unit `km driving (petrol car)`. */
 export interface EquivalentView<Id extends string = string> {
 	id: Id;
@@ -65,6 +69,8 @@ export interface PeriodView {
 	label: string;
 	/** Short qualifier, e.g. the month name or what a projection is based on. */
 	note: string | null;
+	/** With `none`, the totals are zero because nothing was recorded, not because nothing was used. */
+	coverage: PeriodCoverage;
 	totals: TodayView;
 	carbon: EquivalentView<CarbonEquivalentId>[];
 	water: EquivalentView<WaterEquivalentId>[];
@@ -237,8 +243,9 @@ function isEquivalentView<Id extends string>(ids: readonly Id[]) {
 
 export function isPeriodView(value: unknown): value is PeriodView {
 	return isPlainObject(value)
-		&& hasExactKeys(value, ['id', 'label', 'note', 'totals', 'carbon', 'water'])
+		&& hasExactKeys(value, ['id', 'label', 'note', 'coverage', 'totals', 'carbon', 'water'])
 		&& isOneOf(PERIOD_IDS, value.id)
+		&& isOneOf(PERIOD_COVERAGES, value.coverage)
 		&& isDisplayText(value.label, MAX_NAME_LENGTH)
 		&& (value.note === null || isDisplayText(value.note, MAX_NAME_LENGTH))
 		&& isTodayView(value.totals)

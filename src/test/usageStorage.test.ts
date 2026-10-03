@@ -93,6 +93,14 @@ suite('Usage storage', () => {
 			assert.strictEqual(inspect(file, db => db.prepare('PRAGMA user_version').get()?.user_version), SCHEMA_VERSION);
 		});
 
+		test('the file database uses WAL with NORMAL sync, so a large import does not flush on every request', () => {
+			const opened = openUsageStore({ file });
+			const db = (opened.store as unknown as { db: InstanceType<ReturnType<typeof sqlite>['DatabaseSync']> }).db;
+			assert.strictEqual(db.prepare('PRAGMA journal_mode').get()?.journal_mode, 'wal');
+			assert.strictEqual(db.prepare('PRAGMA synchronous').get()?.synchronous, 1, 'NORMAL');
+			opened.store!.close();
+		});
+
 		test('schema upgrades keep existing data', () => {
 			const v1 = history();
 			v1.record(ev());
@@ -361,6 +369,19 @@ suite('Usage storage', () => {
 			assert.strictEqual(periods.previousMonth.from, Date.parse('2026-09-01T00:00:00.000Z'));
 		});
 
+		test('coverage tells a period with no recorded history apart from a period with no usage', () => {
+			const { history: h } = memoryHistory({ startOfMonth: utcStartOfMonth });
+			const coverage = () => h.periods().map(p => [p.id, p.coverage, p.dataFrom]);
+			assert.deepStrictEqual(coverage(), [['today', 'full', null], ['last30Days', 'none', null], ['previousMonth', 'none', null], ['projectedYear', 'none', null]]);
+			const midSeptember = Date.parse('2026-09-12T08:00:00.000Z');
+			h.record(ev({ id: 'first', startedAt: iso(midSeptember) }));
+			assert.deepStrictEqual(coverage(), [
+				['today', 'full', null], ['last30Days', 'partial', midSeptember], ['previousMonth', 'partial', midSeptember], ['projectedYear', 'full', null],
+			]);
+			h.record(ev({ id: 'august', startedAt: iso(Date.parse('2026-08-20T08:00:00.000Z')) }));
+			assert.deepStrictEqual(coverage().map(c => c[1]), ['full', 'full', 'full', 'full']);
+		});
+
 		test('the projected year scales by the days of recorded usage, never by days before tracking', () => {
 			const { history: h } = memoryHistory();
 			assert.deepStrictEqual([byId(h).projectedYear.totals.requests, byId(h).projectedYear.basisDays], [0, 0], 'nothing to project');
@@ -400,7 +421,9 @@ suite('Usage storage', () => {
 			}, { firstRun: false });
 			assert.ok(isHostToWebviewMessage({ type: 'view', ...view }));
 			assert.deepStrictEqual(view.periods.map(p => p.label), ['Today', 'Last 30 days', 'Previous month', 'Projected year']);
-			assert.strictEqual(view.periods[2].note, 'September 2026');
+			assert.strictEqual(view.periods[2].note, 'September 2026, no data', 'nothing recorded is not shown as zero usage');
+			assert.deepStrictEqual(view.periods.map(p => p.coverage), ['full', 'partial', 'none', 'full']);
+			assert.strictEqual(view.periods[1].note, `Data from ${new Date(NOW - 60_000).toLocaleString('en', { day: 'numeric', month: 'short' })}`);
 			assert.strictEqual(view.periods[3].note, 'From 1 day of usage');
 			assert.deepStrictEqual(view.periods[0].carbon.map(e => e.id), ['car', 'train', 'flight', 'kettle', 'phone', 'led']);
 			assert.deepStrictEqual(view.periods[0].water.map(e => e.id), ['tea', 'shower', 'laundry', 'bath', 'dishwasher', 'drinking']);

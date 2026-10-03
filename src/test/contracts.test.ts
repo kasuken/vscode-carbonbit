@@ -55,6 +55,7 @@ assertType<Equal<ViewMessage, {
 		id: 'today' | 'last30Days' | 'previousMonth' | 'projectedYear';
 		label: string;
 		note: string | null;
+		coverage: 'full' | 'partial' | 'none';
 		totals: TotalsLock;
 		carbon: { id: 'car' | 'train' | 'flight' | 'kettle' | 'phone' | 'led'; amount: string; unit: string }[];
 		water: { id: 'tea' | 'shower' | 'laundry' | 'bath' | 'dishwasher' | 'drinking'; amount: string; unit: string }[];
@@ -118,7 +119,7 @@ suite('Contract compatibility', () => {
 		const text = { energy: '1.5 Wh', carbon: '0.4 g CO₂e', water: '10 ml', tokens: '2K', requests: '3' };
 		const setup = { firstRun: false, providers: [{ id: 'claude-code', name: 'Claude Code', state: 'tracking' }] } as const;
 		const period = {
-			id: 'today', label: 'Today', note: null, totals: { ...today, text },
+			id: 'today', label: 'Today', note: null, coverage: 'full', totals: { ...today, text },
 			carbon: [{ id: 'car', amount: '0.0025', unit: 'km driving (petrol car)' }],
 			water: [{ id: 'tea', amount: '0.04', unit: 'mugs of tea or coffee' }],
 		} as const;
@@ -148,6 +149,7 @@ suite('Contract compatibility', () => {
 			{ ...view, live: { ...view.live, prompt: 'hi' } },
 			{ ...view, live: { ...view.live, updatedAt: -1 } },
 			{ ...view, periods: [{ ...period, id: 'forever' }] },
+			{ ...view, periods: [{ ...period, coverage: 'most' }] },
 			{ ...view, periods: [{ ...period, carbon: [{ id: 'rocket', amount: '1', unit: 'launch' }] }] },
 			{ ...view, periods: [{ ...period, water: [{ id: 'tea', amount: '1', unit: 'mug', path: '/home' }] }] },
 			{ ...view, activity: { ...view.activity, tokens: [1.5] } },
