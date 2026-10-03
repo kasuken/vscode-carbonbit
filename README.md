@@ -243,3 +243,7 @@ Automated tests cover the deterministic pipeline from provider adapters to views
 - [How much energy does ChatGPT use?](https://epoch.ai/gradient-updates/how-much-energy-does-chatgpt-use) (Epoch AI, 2025)
 - [Measuring the environmental impact of delivering AI at Google scale](https://arxiv.org/abs/2508.15734) (Google, 2025)
 - [Global Electricity Review 2024](https://ember-energy.org/latest-insights/global-electricity-review-2024/) (Ember)
+
+## License
+
+[MIT](LICENSE)

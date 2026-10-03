@@ -4,7 +4,7 @@ All notable changes to the "vscode-carbonbit" extension will be documented in th
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
-## [Unreleased] - 0.0.1
+## [0.0.1] - 2026-10-03
 
 First MVP (PRD v0.1).
 

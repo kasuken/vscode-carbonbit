@@ -1,18 +1,51 @@
 {
   "name": "vscode-carbonbit",
   "displayName": "CarbonBit",
-  "description": "CarbonBit is a VS Code extension that turns AI coding activity into understandable environmental impact estimates through real-time metrics and a reactive 16-bit world.",
+  "description": "Estimate the energy, CO₂e and water behind your AI coding (GitHub Copilot, Claude Code, Codex) with everyday comparisons and a live 16-bit planet. Local and private.",
   "version": "0.0.1",
   "publisher": "emanuelebartolesi",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#0b1330",
+    "theme": "dark"
+  },
+  "sponsor": {
+    "url": "https://github.com/sponsors/kasuken"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/kasuken/vscode-carbonbit.git"
   },
+  "bugs": {
+    "url": "https://github.com/kasuken/vscode-carbonbit/issues"
+  },
+  "homepage": "https://github.com/kasuken/vscode-carbonbit#readme",
+  "license": "MIT",
+  "pricing": "Free",
   "engines": {
     "vscode": "^1.138.0"
   },
   "categories": [
+    "AI",
+    "Visualization",
     "Other"
+  ],
+  "keywords": [
+    "ai",
+    "carbon",
+    "co2",
+    "carbon footprint",
+    "sustainability",
+    "green software",
+    "energy",
+    "water",
+    "environmental impact",
+    "github copilot",
+    "copilot",
+    "claude code",
+    "codex",
+    "usage tracking",
+    "pixel art"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -46,17 +79,20 @@
       {
         "command": "carbonbit.refreshUsage",
         "title": "Refresh Usage",
-        "category": "CarbonBit"
+        "category": "CarbonBit",
+        "icon": "$(refresh)"
       },
       {
         "command": "carbonbit.showDetails",
         "title": "Show Details",
-        "category": "CarbonBit"
+        "category": "CarbonBit",
+        "icon": "$(graph)"
       },
       {
         "command": "carbonbit.showMethodology",
         "title": "Show Methodology",
-        "category": "CarbonBit"
+        "category": "CarbonBit",
+        "icon": "$(book)"
       },
       {
         "command": "carbonbit.clearLocalData",
@@ -69,6 +105,35 @@
         "category": "CarbonBit"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "carbonbit.refreshUsage",
+          "when": "view == carbonbit.sidebar",
+          "group": "navigation@1"
+        },
+        {
+          "command": "carbonbit.showDetails",
+          "when": "view == carbonbit.sidebar",
+          "group": "navigation@2"
+        },
+        {
+          "command": "carbonbit.showMethodology",
+          "when": "view == carbonbit.sidebar",
+          "group": "navigation@3"
+        },
+        {
+          "command": "carbonbit.openDiagnostics",
+          "when": "view == carbonbit.sidebar",
+          "group": "2_support@1"
+        },
+        {
+          "command": "carbonbit.clearLocalData",
+          "when": "view == carbonbit.sidebar",
+          "group": "3_data@1"
+        }
+      ]
+    },
     "configuration": {
       "title": "CarbonBit",
       "properties": {
@@ -107,6 +172,8 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
+    "package": "vsce package",
+    "publish": "vsce publish",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
